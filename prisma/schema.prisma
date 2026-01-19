@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  FREE
+  PRO
+  ELITE
+}
+
+enum BuildStatus {
+  PENDING
+  QUEUED
+  BUILDING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum BuildPlatform {
+  ANDROID
+  IOS
+}
+
+model User {
+  id                    String    @id @default(cuid())
+  clerkId               String    @unique
+  email                 String    @unique
+  name                  String?
+  avatarUrl             String?
+  plan                  Plan      @default(FREE)
+
+  // Stripe billing
+  stripeCustomerId      String?   @unique
+  stripeSubscriptionId  String?   @unique
+
+  // Encrypted credentials
+  githubTokenEncrypted  String?
+  claudeKeyEncrypted    String?
+
+  // Usage tracking
+  dailyPromptCount      Int       @default(0)
+  lastPromptReset       DateTime  @default(now())
+  totalPrompts          Int       @default(0)
+
+  // Timestamps
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  projects              Project[]
+  credentials           DeveloperCredential[]
+  builds                Build[]
+  promptHistory         PromptHistory[]
+
+  @@index([clerkId])
+  @@index([email])
+  @@index([stripeCustomerId])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  slug        String
+
+  // Code storage - JSONB for flexible file structure
+  codeFiles   Json     @default("{}") // { "App.tsx": "...", "screens/Home.tsx": "..." }
+
+  // App configuration
+  appConfig   Json?    // { "name": "...", "version": "...", "expo": {...} }
+
+  // GitHub integration
+  githubRepo  String?
+  githubUrl   String?
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  builds      Build[]
+  prompts     PromptHistory[]
+
+  @@unique([userId, slug])
+  @@index([userId])
+}
+
+model PromptHistory {
+  id          String   @id @default(cuid())
+  prompt      String   @db.Text
+  response    String?  @db.Text
+  model       String   // "grok" or "claude"
+  tokens      Int?
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+
+  // Relations
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([createdAt])
+}
+
+model DeveloperCredential {
+  id            String   @id @default(cuid())
+  platform      String   // "apple", "google", "expo"
+  name          String   // Display name for the credential
+
+  // All sensitive data encrypted with user's key
+  encryptedData String   @db.Text // JSON: { keyId, issuerId, p8Key } for Apple, etc.
+
+  // Metadata (non-sensitive)
+  metadata      Json?    // { teamId, bundleId, etc. }
+
+  // Verification status
+  verified      Boolean  @default(false)
+  lastVerified  DateTime?
+
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform, name])
+  @@index([userId])
+}
+
+model Build {
+  id            String        @id @default(cuid())
+  platform      BuildPlatform
+  status        BuildStatus   @default(PENDING)
+
+  // EAS Build info
+  easBuildId    String?       @unique
+  buildUrl      String?
+  artifactUrl   String?
+
+  // Build configuration
+  buildProfile  String        @default("production") // "development", "preview", "production"
+  version       String?
+  buildNumber   Int?
+
+  // Logs and errors
+  logs          String?       @db.Text
+  errorMessage  String?
+
+  // Timing
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId     String
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([status])
+  @@index([easBuildId])
+}
+
+model WaitlistEntry {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  source    String?  // Where they signed up from
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
