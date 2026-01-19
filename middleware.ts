@@ -10,16 +10,15 @@ const isPublicRoute = createRouteMatcher([
   "/signup(.*)",
   "/api/webhooks(.*)",
   "/api/health",
+  "/api/docs",
+  "/api/proxy/(.*)", // Proxy endpoints use their own API key auth
 ]);
 
 // Define API routes that need special handling
 const isApiRoute = createRouteMatcher(["/api/(.*)"]);
 
 // Define protected routes that require specific plans
-const isProRoute = createRouteMatcher([
-  "/api/github/(.*)",
-  "/api/build/(.*)",
-]);
+const isProRoute = createRouteMatcher(["/api/github/(.*)", "/api/build/(.*)"]);
 
 const isEliteRoute = createRouteMatcher([
   // Routes that require Elite plan
@@ -39,7 +38,7 @@ export default clerkMiddleware(async (auth, req) => {
     if (isApiRoute(req)) {
       return NextResponse.json(
         { error: "Unauthorized", code: "UNAUTHORIZED" },
-        { status: 401 }
+        { status: 401 },
       );
     }
     // For pages, redirect to login
@@ -49,7 +48,8 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   // Get user's plan from session claims (set via Clerk metadata)
-  const userPlan = (sessionClaims?.metadata as { plan?: string })?.plan || "FREE";
+  const userPlan =
+    (sessionClaims?.metadata as { plan?: string })?.plan || "FREE";
 
   // Check Pro route access
   if (isProRoute(req) && userPlan === "FREE") {
@@ -57,9 +57,9 @@ export default clerkMiddleware(async (auth, req) => {
       return NextResponse.json(
         {
           error: "This feature requires a Pro or Elite plan",
-          code: "PLAN_LIMIT_EXCEEDED"
+          code: "PLAN_LIMIT_EXCEEDED",
         },
-        { status: 403 }
+        { status: 403 },
       );
     }
     return NextResponse.redirect(new URL("/pricing", req.url));
@@ -71,9 +71,9 @@ export default clerkMiddleware(async (auth, req) => {
       return NextResponse.json(
         {
           error: "This feature requires an Elite plan",
-          code: "PLAN_LIMIT_EXCEEDED"
+          code: "PLAN_LIMIT_EXCEEDED",
         },
-        { status: 403 }
+        { status: 403 },
       );
     }
     return NextResponse.redirect(new URL("/pricing", req.url));

@@ -88,6 +88,7 @@ model Project {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   builds      Build[]
   prompts     PromptHistory[]
+  apiKeys     ProjectApiKey[]
 
   @@unique([userId, slug])
   @@index([userId])
@@ -185,4 +186,134 @@ model WaitlistEntry {
   createdAt DateTime @default(now())
 
   @@index([email])
+}
+
+// ============================================
+// Proxy System - Managed API Access
+// ============================================
+
+enum ProxyService {
+  OPENAI
+  MAPS
+  EMAIL
+  SMS
+  STORAGE
+  DATABASE
+  PUSH
+  ANALYTICS
+}
+
+model ProjectApiKey {
+  id          String   @id @default(cuid())
+  name        String   @default("Default")
+  keyHash     String   @unique // Hashed API key for lookup
+  keyPrefix   String   // First 8 chars for display (rux_xxx...)
+
+  // Permissions
+  services    ProxyService[] // Which services this key can access
+
+  // Rate limits (overrides plan defaults if set)
+  rateLimit   Int?     // Requests per minute
+
+  // Status
+  active      Boolean  @default(true)
+  lastUsedAt  DateTime?
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+
+  // Relations
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  usageRecords ProxyUsage[]
+
+  @@index([keyHash])
+  @@index([projectId])
+}
+
+model ProxyUsage {
+  id          String       @id @default(cuid())
+  service     ProxyService
+  operation   String       // e.g., "chat.completions", "geocode", "send"
+
+  // Usage metrics
+  creditsUsed Int
+  requestSize Int?         // Bytes
+  responseSize Int?        // Bytes
+  latencyMs   Int?
+
+  // Request metadata
+  metadata    Json?        // Service-specific data (tokens, recipients, etc.)
+
+  // Status
+  success     Boolean
+  errorCode   String?
+
+  // Timestamps
+  createdAt   DateTime     @default(now())
+
+  // Relations
+  apiKeyId    String
+  apiKey      ProjectApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  projectId   String
+  userId      String
+
+  @@index([projectId, createdAt])
+  @@index([userId, createdAt])
+  @@index([service, createdAt])
+  @@index([apiKeyId])
+}
+
+model ProxyCredits {
+  id              String   @id @default(cuid())
+
+  // Credits balance
+  balance         Int      @default(0)
+  monthlyAllotment Int     @default(0)
+
+  // Billing period
+  periodStart     DateTime @default(now())
+  periodEnd       DateTime
+
+  // Overage tracking
+  overageCredits  Int      @default(0)
+  overageRate     Float    @default(0.001) // $ per credit
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  userId          String   @unique
+
+  @@index([userId])
+  @@index([periodEnd])
+}
+
+model StorageFile {
+  id          String   @id @default(cuid())
+  filename    String
+  contentType String
+  size        Int      // Bytes
+
+  // Storage location
+  bucket      String   @default("rux-storage")
+  key         String   // S3/R2 object key
+  url         String?  // Public URL if accessible
+
+  // Access control
+  isPublic    Boolean  @default(false)
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  deletedAt   DateTime?
+
+  // Relations
+  projectId   String
+  userId      String
+
+  @@unique([bucket, key])
+  @@index([projectId])
+  @@index([userId])
 }

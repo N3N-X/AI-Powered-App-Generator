@@ -9,6 +9,8 @@ import { CodeFiles } from "@/types";
  *   get:
  *     summary: Generate preview HTML for project
  *     description: Generates an HTML preview of the project using Expo Snack, displaying it in a phone mockup iframe. If no code exists, shows an empty state.
+ *     tags:
+ *       - Projects
  *     parameters:
  *       - in: query
  *         name: projectId
@@ -81,11 +83,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Generate Snack URL
-    const snackUrl = createSnackUrl(codeFiles, project.name);
-
-    // Generate preview HTML with iframe
-    const previewHtml = generatePreviewHtml(snackUrl, project.name);
+    // Generate preview HTML with embedded code (not URL params)
+    const previewHtml = generatePreviewHtml(codeFiles, project.name);
 
     return new NextResponse(previewHtml, {
       headers: {
@@ -99,59 +98,55 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function createSnackUrl(
+function generatePreviewHtml(
   codeFiles: CodeFiles,
   projectName?: string | null,
 ): string {
-  // Build URL parameters for Snack
-  const params = new URLSearchParams();
+  const escapedName = escapeHtml(projectName || "RUX App");
 
-  params.set("name", projectName || "RUX App");
-  params.set("description", "Built with RUX");
-  params.set("platform", "web");
-  params.set("preview", "true");
-  params.set("theme", "dark");
-  params.set("supportedPlatforms", "ios,android,web");
+  // Prepare files for Snack - encode as base64 JSON to avoid escaping issues
+  const filesForSnack: Record<string, { type: string; contents: string }> = {};
 
-  // Add each file
   for (const [path, content] of Object.entries(codeFiles)) {
-    // Snack expects files in a specific format
-    params.append(`files[${encodeURIComponent(path)}]`, content);
+    filesForSnack[path] = {
+      type: "CODE",
+      contents: content,
+    };
   }
 
-  // Add default dependencies if not in package.json
-  const defaultDeps: Record<string, string> = {
-    expo: "~51.0.0",
-    "expo-status-bar": "~1.12.1",
-    react: "18.2.0",
-    "react-native": "0.74.5",
+  // Ensure we have required files
+  if (!filesForSnack["package.json"]) {
+    filesForSnack["package.json"] = {
+      type: "CODE",
+      contents: JSON.stringify(
+        {
+          dependencies: {
+            expo: "~52.0.0",
+            "expo-status-bar": "~2.0.0",
+            react: "18.3.1",
+            "react-native": "0.76.5",
+          },
+        },
+        null,
+        2,
+      ),
+    };
+  }
+
+  const snackData = {
+    files: filesForSnack,
+    name: escapedName,
+    description: "Built with RUX",
+    dependencies: {
+      expo: "~52.0.0",
+      "expo-status-bar": "~2.0.0",
+      react: "18.3.1",
+      "react-native": "0.76.5",
+    },
   };
 
-  // Check if package.json exists and parse dependencies
-  if (codeFiles["package.json"]) {
-    try {
-      const pkg = JSON.parse(codeFiles["package.json"]);
-      if (pkg.dependencies) {
-        Object.assign(defaultDeps, pkg.dependencies);
-      }
-    } catch {
-      // Ignore parse errors
-    }
-  }
-
-  // Add dependencies
-  for (const [pkg, version] of Object.entries(defaultDeps)) {
-    params.append(`dependencies[${encodeURIComponent(pkg)}]`, version);
-  }
-
-  return `https://snack.expo.dev/embedded?${params.toString()}`;
-}
-
-function generatePreviewHtml(
-  snackUrl: string,
-  projectName?: string | null,
-): string {
-  const escapedName = escapeHtml(projectName || "RUX App");
+  // Base64 encode the data to pass it safely
+  const encodedData = Buffer.from(JSON.stringify(snackData)).toString("base64");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -290,7 +285,6 @@ function generatePreviewHtml(
           </div>
           <iframe
             id="snack-frame"
-            src="${escapeHtml(snackUrl)}"
             allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
             sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts allow-downloads"
           ></iframe>
@@ -299,19 +293,78 @@ function generatePreviewHtml(
     </div>
   </div>
   <script>
-    const iframe = document.getElementById('snack-frame');
-    const loading = document.getElementById('loading');
+    (function() {
+      const iframe = document.getElementById('snack-frame');
+      const loading = document.getElementById('loading');
+      const encodedData = "${encodedData}";
 
-    iframe.onload = function() {
+      // Decode the snack data
+      const snackData = JSON.parse(atob(encodedData));
+
+      // Build the Snack URL with files as URL parameters
+      // We'll use a minimal approach to avoid URL length issues
+      const params = new URLSearchParams();
+      params.set('name', snackData.name);
+      params.set('description', snackData.description);
+      params.set('platform', 'web');
+      params.set('preview', 'true');
+      params.set('theme', 'dark');
+      params.set('supportedPlatforms', 'web');
+
+      // Add dependencies
+      Object.entries(snackData.dependencies).forEach(([pkg, version]) => {
+        params.set('dependencies[' + encodeURIComponent(pkg) + ']', version);
+      });
+
+      // Add files - using Snack's code parameter format
+      Object.entries(snackData.files).forEach(([path, file]) => {
+        params.set('files[' + encodeURIComponent(path) + ']', file.contents);
+      });
+
+      const snackUrl = 'https://snack.expo.dev/embedded?' + params.toString();
+
+      // Check URL length - if too long, use alternative method
+      if (snackUrl.length > 8000) {
+        // For very large projects, we need to use postMessage API
+        // First load Snack without files, then inject via postMessage
+        const baseParams = new URLSearchParams();
+        baseParams.set('name', snackData.name);
+        baseParams.set('platform', 'web');
+        baseParams.set('preview', 'true');
+        baseParams.set('theme', 'dark');
+
+        iframe.src = 'https://snack.expo.dev/embedded?' + baseParams.toString();
+
+        // Wait for iframe to load, then send files via postMessage
+        iframe.onload = function() {
+          setTimeout(function() {
+            try {
+              iframe.contentWindow.postMessage({
+                type: 'SNACK_UPDATE',
+                files: snackData.files,
+                dependencies: snackData.dependencies,
+              }, 'https://snack.expo.dev');
+            } catch (e) {
+              console.log('PostMessage not supported, falling back to URL params');
+            }
+            loading.classList.add('hidden');
+          }, 2000);
+        };
+      } else {
+        iframe.src = snackUrl;
+
+        iframe.onload = function() {
+          setTimeout(function() {
+            loading.classList.add('hidden');
+          }, 2000);
+        };
+      }
+
+      // Fallback timeout
       setTimeout(function() {
         loading.classList.add('hidden');
-      }, 2000);
-    };
-
-    // Fallback timeout
-    setTimeout(function() {
-      loading.classList.add('hidden');
-    }, 8000);
+      }, 10000);
+    })();
   </script>
 </body>
 </html>`;
