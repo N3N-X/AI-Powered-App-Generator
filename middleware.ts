@@ -47,11 +47,12 @@ export default clerkMiddleware(async (auth, req) => {
   const hostname = req.headers.get("host") || "";
   const subdomain = hostname.split(".")[0];
 
-  // Check if it's a user subdomain (not www, not api, not the main domain)
+  // Check if it's a user subdomain (not www, not api, not staging, not the main domain)
   const isSubdomain =
     hostname.includes(".rux.sh") &&
     subdomain !== "www" &&
     subdomain !== "api" &&
+    subdomain !== "staging" &&
     subdomain !== "rux";
 
   // If it's a subdomain, serve the project via /api/serve
