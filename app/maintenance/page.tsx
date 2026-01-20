@@ -5,16 +5,6 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 
-export const metadata = {
-  title: "Coming Soon - RUX",
-  description:
-    "RUX is launching soon with powerful AI-driven app development tools. Build mobile and web apps with AI assistance.",
-  robots: {
-    index: false,
-    follow: false,
-  },
-};
-
 export default function MaintenancePage() {
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4">
