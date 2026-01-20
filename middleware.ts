@@ -43,6 +43,24 @@ const isEliteRoute = createRouteMatcher([
 export default clerkMiddleware(async (auth, req) => {
   const { userId, sessionClaims } = await auth();
 
+  // Handle subdomain routing for user projects (*.rux.sh)
+  const hostname = req.headers.get("host") || "";
+  const subdomain = hostname.split(".")[0];
+
+  // Check if it's a user subdomain (not www, not api, not the main domain)
+  const isSubdomain =
+    hostname.includes(".rux.sh") &&
+    subdomain !== "www" &&
+    subdomain !== "api" &&
+    subdomain !== "rux";
+
+  // If it's a subdomain, serve the project via /api/serve
+  if (isSubdomain) {
+    const url = req.nextUrl.clone();
+    url.pathname = `/api/serve/${subdomain}${req.nextUrl.pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
   // Check maintenance mode
   const maintenanceMode = process.env.MAINTENANCE_MODE === "true";
 
