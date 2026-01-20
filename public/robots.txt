@@ -1,0 +1,10 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+
+# Disallow dashboard and API routes
+Disallow: /dashboard
+Disallow: /api/
+
+# Sitemap
+Sitemap: https://rux.sh/sitemap.xml
