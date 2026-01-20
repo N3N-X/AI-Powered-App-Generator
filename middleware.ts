@@ -18,6 +18,7 @@ const isPublicRoute = createRouteMatcher([
   "/features",
   "/sign-in(.*)",
   "/sign-up(.*)",
+  "/user-profile(.*)", // Clerk user profile (handles billing)
   "/api/webhooks(.*)",
   "/api/health",
   "/api/proxy/(.*)", // Proxy endpoints use their own API key auth
@@ -131,9 +132,9 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.redirect(signInUrl);
   }
 
-  // Get user's plan from session claims (set via Clerk metadata)
+  // Get user's plan from Clerk public metadata
   const userPlan =
-    (sessionClaims?.metadata as { plan?: string })?.plan || "FREE";
+    (sessionClaims?.public_metadata as { plan?: string })?.plan || "FREE";
 
   // Check Pro route access
   if (isProRoute(req) && userPlan === "FREE") {

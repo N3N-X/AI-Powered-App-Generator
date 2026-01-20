@@ -95,40 +95,16 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpgrade = async (plan: "PRO" | "ELITE") => {
-    setIsConnecting(true);
-    try {
-      const response = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to create checkout session");
-      }
-
-      const { url } = await response.json();
-      if (url) {
-        window.location.href = url;
-      }
-    } catch (error) {
-      toast({
-        title: "Upgrade failed",
-        description:
-          error instanceof Error ? error.message : "Please try again",
-        variant: "destructive",
-      });
-    } finally {
-      setIsConnecting(false);
-    }
+  const handleUpgrade = () => {
+    // Redirect to Clerk's user profile where they can manage subscriptions
+    // Clerk Billing automatically shows available plans in the billing section
+    window.location.href = "/user-profile";
   };
 
   const handleManageSubscription = async () => {
     setIsConnecting(true);
     try {
-      const response = await fetch("/api/stripe/portal", {
+      const response = await fetch("/api/billing/portal", {
         method: "POST",
       });
 
@@ -265,10 +241,10 @@ export default function SettingsPage() {
                   <Button
                     variant="gradient"
                     className="w-full"
-                    onClick={() => handleUpgrade("PRO")}
+                    onClick={handleUpgrade}
                   >
                     <Sparkles className="h-4 w-4 mr-2" />
-                    Upgrade to get 20,000 credits/month
+                    Upgrade to get more credits
                   </Button>
                 </CardFooter>
               )}
@@ -609,7 +585,7 @@ export default function SettingsPage() {
                       </CardTitle>
                       <CardDescription className="text-gray-600 dark:text-slate-400">
                         <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                          $19
+                          $39
                         </span>
                         <span className="text-gray-600 dark:text-slate-400">
                           /month
@@ -640,10 +616,9 @@ export default function SettingsPage() {
                       <Button
                         variant="gradient"
                         className="w-full"
-                        onClick={() => handleUpgrade("PRO")}
-                        disabled={isConnecting}
+                        onClick={handleUpgrade}
                       >
-                        {isConnecting ? "Loading..." : "Upgrade to Pro"}
+                        Upgrade to Pro
                       </Button>
                     </CardFooter>
                   </Card>
@@ -660,7 +635,7 @@ export default function SettingsPage() {
                     </div>
                     <CardDescription className="text-gray-600 dark:text-slate-400">
                       <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                        $49
+                        $89
                       </span>
                       <span className="text-gray-600 dark:text-slate-400">
                         /month
@@ -691,10 +666,9 @@ export default function SettingsPage() {
                     <Button
                       variant="gradient"
                       className="w-full"
-                      onClick={() => handleUpgrade("ELITE")}
-                      disabled={isConnecting}
+                      onClick={handleUpgrade}
                     >
-                      {isConnecting ? "Loading..." : "Upgrade to Elite"}
+                      Upgrade to Elite
                     </Button>
                   </CardFooter>
                 </Card>

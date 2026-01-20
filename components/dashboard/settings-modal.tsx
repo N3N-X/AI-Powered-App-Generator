@@ -456,7 +456,7 @@ export function SettingsModal() {
                     <div className="flex items-center justify-between">
                       <div>
                         <h5 className="font-medium text-white">Pro Plan</h5>
-                        <p className="text-sm text-slate-400">$19/month</p>
+                        <p className="text-sm text-slate-400">$39/month</p>
                         <ul className="text-xs text-slate-500 mt-2 space-y-1">
                           <li>100 prompts per day</li>
                           <li>20 projects</li>
@@ -485,7 +485,7 @@ export function SettingsModal() {
                           Best Value
                         </Badge>
                       </h5>
-                      <p className="text-sm text-slate-400">$49/month</p>
+                      <p className="text-sm text-slate-400">$89/month</p>
                       <ul className="text-xs text-slate-500 mt-2 space-y-1">
                         <li>500 prompts per day</li>
                         <li>Unlimited projects</li>

@@ -1,14 +1,14 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { stripe, PLANS, PlanType, isStripeConfigured } from "@/lib/stripe";
+import { stripe, TOKEN_PACKAGES, TokenPackageType, isStripeConfigured } from "@/lib/billing";
 import prisma from "@/lib/db";
 
 /**
  * @swagger
- * /api/stripe/checkout:
+ * /api/billing/tokens/purchase:
  *   post:
- *     summary: Create Stripe checkout session
- *     description: Creates a Stripe checkout session for subscription to a plan (PRO or ELITE). Requires authentication and valid Stripe configuration.
+ *     summary: Purchase token credits
+ *     description: Creates a Stripe checkout session for one-time token purchase. Works independently from subscription plans.
  *     requestBody:
  *       required: true
  *       content:
@@ -16,12 +16,12 @@ import prisma from "@/lib/db";
  *           schema:
  *             type: object
  *             properties:
- *               plan:
+ *               package:
  *                 type: string
- *                 enum: [PRO, ELITE]
- *                 description: The plan to subscribe to
+ *                 enum: [SMALL, MEDIUM, LARGE, MEGA]
+ *                 description: The token package to purchase
  *             required:
- *               - plan
+ *               - package
  *     responses:
  *       200:
  *         description: Checkout session created successfully
@@ -34,7 +34,7 @@ import prisma from "@/lib/db";
  *                   type: string
  *                   description: URL to the Stripe checkout page
  *       400:
- *         description: Invalid plan or missing configuration
+ *         description: Invalid package
  *       401:
  *         description: Unauthorized
  *       404:
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Stripe is not configured. Please add STRIPE_SECRET_KEY, STRIPE_PRO_PRICE_ID, and STRIPE_ELITE_PRICE_ID to your environment variables.",
+            "Stripe is not configured. Please add STRIPE_SECRET_KEY to your environment variables.",
         },
         { status: 503 },
       );
@@ -62,17 +62,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { plan } = await request.json();
+    const { package: packageType } = await request.json();
 
-    if (!plan || !["PRO", "ELITE"].includes(plan)) {
-      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+    if (!packageType || !["SMALL", "MEDIUM", "LARGE", "MEGA"].includes(packageType)) {
+      return NextResponse.json({ error: "Invalid token package" }, { status: 400 });
     }
 
-    const planConfig = PLANS[plan as PlanType];
-    if (!planConfig.priceId) {
+    const tokenPackage = TOKEN_PACKAGES[packageType as TokenPackageType];
+    if (!tokenPackage.priceId) {
       return NextResponse.json(
         {
-          error: `Price ID for ${plan} plan is not configured. Please set STRIPE_${plan}_PRICE_ID in your environment.`,
+          error: `Price ID for ${packageType} package is not configured. Please set STRIPE_TOKEN_${packageType}_PRICE_ID in your environment.`,
         },
         { status: 400 },
       );
@@ -109,36 +109,31 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Create checkout session
+    // Create checkout session for one-time payment
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      mode: "subscription",
+      mode: "payment", // One-time payment, not subscription
       payment_method_types: ["card"],
       line_items: [
         {
-          price: planConfig.priceId,
+          price: tokenPackage.priceId,
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard?success=true&plan=${plan}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard?canceled=true`,
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard?token_purchase=success&credits=${tokenPackage.credits}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard?token_purchase=canceled`,
       metadata: {
         userId: user.id,
         clerkId: userId,
-        plan: plan,
-      },
-      subscription_data: {
-        metadata: {
-          userId: user.id,
-          clerkId: userId,
-          plan: plan,
-        },
+        packageType: packageType,
+        credits: tokenPackage.credits.toString(),
+        type: "token_purchase",
       },
     });
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("Stripe checkout error:", error);
+    console.error("[Token Purchase] Checkout error:", error);
     const errorMessage =
       error instanceof Error
         ? error.message
