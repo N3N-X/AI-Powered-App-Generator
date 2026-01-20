@@ -79,7 +79,7 @@ export function LandingCTA() {
                 className="flex flex-col sm:flex-row items-center justify-center gap-4"
               >
                 <Button size="xl" variant="gradient" asChild className="group">
-                  <Link href="/signup">
+                  <Link href="/sign-up">
                     Start Building Now
                     <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
                   </Link>
