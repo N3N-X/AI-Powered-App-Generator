@@ -1,14 +1,14 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { stripe, isStripeConfigured } from "@/lib/stripe";
+import { stripe, isStripeConfigured } from "@/lib/billing";
 import prisma from "@/lib/db";
 
 /**
  * @swagger
- * /api/stripe/portal:
+ * /api/billing/portal:
  *   post:
  *     summary: Create billing portal session
- *     description: Creates a Stripe billing portal session for the authenticated user to manage their subscription. Requires Stripe configuration and an existing customer ID.
+ *     description: Creates a Stripe billing portal session for the authenticated user to manage their subscription and view token purchase history. Works with Clerk Billing.
  *     responses:
  *       200:
  *         description: Portal session created successfully
@@ -55,22 +55,36 @@ export async function POST(_request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (!user.stripeCustomerId) {
-      return NextResponse.json(
-        { error: "No billing account found" },
-        { status: 400 },
-      );
+    // Check if user has a Stripe customer ID
+    let customerId = user.stripeCustomerId;
+
+    // If no customer ID, create one
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        name: user.name || undefined,
+        metadata: {
+          clerkId: userId,
+          userId: user.id,
+        },
+      });
+      customerId = customer.id;
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { stripeCustomerId: customerId },
+      });
     }
 
     // Create billing portal session
     const session = await stripe.billingPortal.sessions.create({
-      customer: user.stripeCustomerId,
-      return_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard`,
+      customer: customerId,
+      return_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard/settings`,
     });
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("Billing portal error:", error);
+    console.error("[Billing Portal] Error:", error);
     return NextResponse.json(
       { error: "Failed to create billing portal session" },
       { status: 500 },

@@ -69,6 +69,7 @@ model User {
   credentials           DeveloperCredential[]
   builds                Build[]
   promptHistory         PromptHistory[]
+  tokenPurchases        TokenPurchase[]
 
   @@index([clerkId])
   @@index([email])
@@ -385,4 +386,35 @@ model StorageFile {
   @@unique([bucket, key])
   @@index([projectId])
   @@index([userId])
+}
+
+// ============================================
+// Token Purchase System (One-time purchases)
+// ============================================
+
+model TokenPurchase {
+  id                String   @id @default(cuid())
+
+  // Purchase details
+  credits           Int      // Number of credits purchased
+  amountPaid        Int      // Amount paid in cents
+  currency          String   @default("usd")
+
+  // Stripe payment info
+  stripePaymentIntentId String? @unique
+  stripeChargeId        String?
+
+  // Status
+  status            String   @default("completed") // "completed", "refunded", "failed"
+
+  // Timestamps
+  createdAt         DateTime @default(now())
+  refundedAt        DateTime?
+
+  // Relations
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([stripePaymentIntentId])
 }

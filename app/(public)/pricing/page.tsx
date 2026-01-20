@@ -1,8 +1,9 @@
 import { Metadata } from "next";
 import { LandingNavbar } from "@/components/landing/navbar";
 import { LandingFooter } from "@/components/landing/footer";
-import { LandingPricing } from "@/components/landing/pricing";
+import { SubscriptionPlans } from "@/components/billing/subscription-plans";
 import { PricingFAQ } from "@/components/landing/pricing-faq";
+import { TokenPackages } from "@/components/billing/token-packages";
 
 export const metadata: Metadata = {
   title: "Pricing - RUX",
@@ -27,12 +28,18 @@ export default function PricingPage() {
             Choose Your Plan
           </h1>
           <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-            Start free and scale as you need. All plans include our core AI-powered
-            code generation.
+            Start free and scale as you need. All plans include our core
+            AI-powered code generation.
           </p>
         </div>
 
-        <LandingPricing />
+        <SubscriptionPlans />
+
+        {/* Token Packages Section */}
+        <div className="mt-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+          <TokenPackages />
+        </div>
+
         <PricingFAQ />
       </main>
 
