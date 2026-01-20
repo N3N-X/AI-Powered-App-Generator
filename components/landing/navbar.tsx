@@ -71,10 +71,10 @@ export function LandingNavbar() {
 
             <SignedOut>
               <Button variant="ghost" asChild>
-                <Link href="/login">Sign In</Link>
+                <Link href="/sign-in">Sign In</Link>
               </Button>
               <Button variant="gradient" asChild>
-                <Link href="/signup">Get Started</Link>
+                <Link href="/sign-up">Get Started</Link>
               </Button>
             </SignedOut>
             <SignedIn>
@@ -130,10 +130,10 @@ export function LandingNavbar() {
                   className="w-full justify-start"
                   asChild
                 >
-                  <Link href="/login">Sign In</Link>
+                  <Link href="/sign-in">Sign In</Link>
                 </Button>
                 <Button variant="gradient" className="w-full" asChild>
-                  <Link href="/signup">Get Started</Link>
+                  <Link href="/sign-up">Get Started</Link>
                 </Button>
               </SignedOut>
               <SignedIn>

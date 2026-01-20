@@ -53,7 +53,7 @@ export default function MaintenancePage() {
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <SignedOut>
             <Button variant="gradient" asChild>
-              <Link href="/login">
+              <Link href="/sign-in">
                 <LogIn className="h-4 w-4 mr-2" />
                 Sign In
               </Link>

@@ -16,7 +16,8 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/pricing",
   "/features",
-  "/login(.*)",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
   "/api/webhooks(.*)",
   "/api/health",
   "/api/proxy/(.*)", // Proxy endpoints use their own API key auth
@@ -71,18 +72,14 @@ export default clerkMiddleware(async (auth, req) => {
       return NextResponse.next();
     }
 
-    // Allow login pages and auth webhooks
+    // Allow auth pages and webhooks
     if (
-      req.nextUrl.pathname.startsWith("/login") ||
+      req.nextUrl.pathname.startsWith("/sign-in") ||
+      req.nextUrl.pathname.startsWith("/sign-up") ||
       req.nextUrl.pathname.startsWith("/api/webhooks") ||
       req.nextUrl.pathname.startsWith("/api/clerk")
     ) {
       return NextResponse.next();
-    }
-
-    // Block signup during maintenance - redirect to maintenance page
-    if (req.nextUrl.pathname.startsWith("/signup")) {
-      return NextResponse.redirect(new URL("/maintenance", req.url));
     }
 
     // Check if user is admin by fetching email from Clerk
@@ -128,10 +125,10 @@ export default clerkMiddleware(async (auth, req) => {
         { status: 401 },
       );
     }
-    // For pages, redirect to login
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("redirect_url", req.url);
-    return NextResponse.redirect(loginUrl);
+    // For pages, redirect to sign-in
+    const signInUrl = new URL("/sign-in", req.url);
+    signInUrl.searchParams.set("redirect_url", req.url);
+    return NextResponse.redirect(signInUrl);
   }
 
   // Get user's plan from session claims (set via Clerk metadata)

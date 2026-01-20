@@ -22,7 +22,7 @@ const plans = [
       "Export to ZIP",
     ],
     cta: "Get Started",
-    href: "/signup",
+    href: "/sign-up",
     highlighted: false,
   },
   {
@@ -41,7 +41,7 @@ const plans = [
       "Email support",
     ],
     cta: "Start Pro Trial",
-    href: "/signup?plan=pro",
+    href: "/sign-up?plan=pro",
     highlighted: true,
     badge: "Most Popular",
   },
@@ -61,7 +61,7 @@ const plans = [
       "Custom integrations",
     ],
     cta: "Go Elite",
-    href: "/signup?plan=elite",
+    href: "/sign-up?plan=elite",
     highlighted: false,
   },
 ];

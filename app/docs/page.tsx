@@ -148,7 +148,7 @@ Welcome to RUX! This guide will help you build your first app in minutes.
 
 ## Step 1: Create Your Account
 
-1. Sign up at [rux.sh/signup](/signup)
+1. Sign up at [rux.sh/sign-up](/sign-up)
 2. Verify your email
 3. You'll start with 3,000 free credits
 
@@ -449,7 +449,7 @@ export default function DocsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => router.push("/login")}
+                  onClick={() => router.push("/sign-in")}
                   className="hidden sm:flex"
                 >
                   Sign In
@@ -457,7 +457,7 @@ export default function DocsPage() {
                 <Button
                   variant="gradient"
                   size="sm"
-                  onClick={() => router.push("/signup")}
+                  onClick={() => router.push("/sign-up")}
                 >
                   Get Started
                 </Button>
