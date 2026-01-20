@@ -1,0 +1,49 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Gradient definitions -->
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="rocketGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e0e7ff;stop-opacity:0.95" />
+    </linearGradient>
+    <linearGradient id="fireGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ef4444;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded rectangle background -->
+  <rect width="40" height="40" rx="8" fill="url(#bgGrad)" />
+
+  <!-- Rocket ship -->
+  <g transform="translate(20, 20)">
+    <!-- Flame/exhaust -->
+    <path d="M -2,8 Q 0,12 2,8" fill="url(#fireGrad)" opacity="0.8"/>
+
+    <!-- Rocket body -->
+    <path d="M -3,-10 L 0,-12 L 3,-10 L 3,8 L -3,8 Z" fill="url(#rocketGrad)"/>
+
+    <!-- Window -->
+    <circle cx="0" cy="-4" r="2.5" fill="#6366f1" opacity="0.3"/>
+    <circle cx="0" cy="-4" r="1.5" fill="#8b5cf6" opacity="0.5"/>
+
+    <!-- Left fin -->
+    <path d="M -3,4 L -6,8 L -3,8 Z" fill="url(#rocketGrad)" opacity="0.8"/>
+
+    <!-- Right fin -->
+    <path d="M 3,4 L 6,8 L 3,8 Z" fill="url(#rocketGrad)" opacity="0.8"/>
+
+    <!-- Nose cone highlight -->
+    <path d="M -1,-10 L 0,-12 L 1,-10 Z" fill="white" opacity="0.4"/>
+
+    <!-- Stars around rocket -->
+    <circle cx="-7" cy="-7" r="0.8" fill="white" opacity="0.7"/>
+    <circle cx="7" cy="-5" r="0.6" fill="white" opacity="0.6"/>
+    <circle cx="-6" cy="2" r="0.7" fill="white" opacity="0.5"/>
+    <circle cx="6" cy="0" r="0.5" fill="white" opacity="0.6"/>
+  </g>
+</svg>
