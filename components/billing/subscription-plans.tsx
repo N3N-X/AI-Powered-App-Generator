@@ -26,7 +26,7 @@ const plans = [
   {
     name: "Pro",
     description: "For serious app builders",
-    price: "$19",
+    price: "$39",
     period: "per month",
     features: [
       "50,000 credits/month",
@@ -44,7 +44,7 @@ const plans = [
   {
     name: "Elite",
     description: "Maximum power and flexibility",
-    price: "$49",
+    price: "$89",
     period: "per month",
     features: [
       "200,000 credits/month",
@@ -95,10 +95,9 @@ export function SubscriptionPlans() {
       return;
     }
 
-    // For Clerk Billing, redirect to Clerk's hosted checkout
-    // Or open Clerk's billing portal
-    // You'll configure this URL in Clerk Dashboard → Billing
-    window.location.href = `/dashboard/settings?upgrade=${planName.toLowerCase()}`;
+    // For Clerk Billing, redirect to user profile where billing is managed
+    // Clerk automatically shows available subscription plans in the billing section
+    window.location.href = "/user-profile";
   };
 
   return (
@@ -122,7 +121,8 @@ export function SubscriptionPlans() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="mt-4 text-lg text-gray-600 dark:text-slate-400 max-w-2xl mx-auto"
           >
-            Choose the plan that fits your needs. All plans include credits that reset monthly.
+            Choose the plan that fits your needs. All plans include credits that
+            reset monthly.
           </motion.p>
         </div>
 
@@ -135,7 +135,9 @@ export function SubscriptionPlans() {
           className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-6"
         >
           {plans.map((plan) => {
-            const isCurrentPlan = currentPlan === plan.clerkPlanId || (plan.name === "Free" && !currentPlan);
+            const isCurrentPlan =
+              currentPlan === plan.clerkPlanId ||
+              (plan.name === "Free" && !currentPlan);
 
             return (
               <motion.div
@@ -207,7 +209,11 @@ export function SubscriptionPlans() {
                     onClick={() => handleUpgrade(plan.name)}
                     disabled={isCurrentPlan}
                   >
-                    {isCurrentPlan ? "Current Plan" : plan.name === "Free" ? "Get Started" : "Upgrade"}
+                    {isCurrentPlan
+                      ? "Current Plan"
+                      : plan.name === "Free"
+                        ? "Get Started"
+                        : "Upgrade"}
                   </Button>
 
                   {/* Features */}

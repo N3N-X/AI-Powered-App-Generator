@@ -28,7 +28,7 @@ const plans = [
   {
     name: "Pro",
     description: "For serious app builders",
-    price: "$19",
+    price: "$39",
     period: "per month",
     features: [
       "50,000 credits/month",
@@ -47,7 +47,7 @@ const plans = [
   {
     name: "Elite",
     description: "Maximum power and flexibility",
-    price: "$49",
+    price: "$89",
     period: "per month",
     features: [
       "200,000 credits/month",

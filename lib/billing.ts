@@ -42,7 +42,7 @@ export const PLANS = {
   PRO: {
     name: "Pro",
     description: "For serious builders",
-    price: 19,
+    price: 39,
     interval: "month",
     features: [
       "50,000 credits/month",
@@ -63,7 +63,7 @@ export const PLANS = {
   ELITE: {
     name: "Elite",
     description: "Unlimited power for teams",
-    price: 49,
+    price: 89,
     interval: "month",
     features: [
       "200,000 credits/month",
@@ -133,26 +133,26 @@ export type TokenPackageType = keyof typeof TOKEN_PACKAGES;
 
 export const CREDIT_COSTS = {
   // AI Generation
-  PROMPT_SMALL: 10,      // Simple prompts (<500 chars)
-  PROMPT_MEDIUM: 50,     // Medium prompts (500-2000 chars)
-  PROMPT_LARGE: 200,     // Large prompts (>2000 chars)
+  PROMPT_SMALL: 10, // Simple prompts (<500 chars)
+  PROMPT_MEDIUM: 50, // Medium prompts (500-2000 chars)
+  PROMPT_LARGE: 200, // Large prompts (>2000 chars)
 
   // Builds
-  ANDROID_BUILD: 1000,   // Android APK build
-  IOS_BUILD: 2000,       // iOS IPA build
+  ANDROID_BUILD: 1000, // Android APK build
+  IOS_BUILD: 2000, // iOS IPA build
 
   // Exports
-  GITHUB_EXPORT: 100,    // Export to GitHub
-  ZIP_EXPORT: 50,        // Download as ZIP
+  GITHUB_EXPORT: 100, // Export to GitHub
+  ZIP_EXPORT: 50, // Download as ZIP
 
   // Proxy Services (per request)
-  AI_CHAT: 5,           // AI chat request
-  IMAGE_GEN: 100,       // Image generation
-  TRANSCRIPTION: 50,    // Audio transcription
-  TTS: 30,              // Text-to-speech
-  SEARCH: 2,            // Search query
-  EMAIL: 1,             // Send email
-  SMS: 5,               // Send SMS
+  AI_CHAT: 5, // AI chat request
+  IMAGE_GEN: 100, // Image generation
+  TRANSCRIPTION: 50, // Audio transcription
+  TTS: 30, // Text-to-speech
+  SEARCH: 2, // Search query
+  EMAIL: 1, // Send email
+  SMS: 5, // Send SMS
 } as const;
 
 // ============================================

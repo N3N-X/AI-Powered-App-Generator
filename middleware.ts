@@ -18,6 +18,7 @@ const isPublicRoute = createRouteMatcher([
   "/features",
   "/sign-in(.*)",
   "/sign-up(.*)",
+  "/user-profile(.*)", // Clerk user profile (handles billing)
   "/api/webhooks(.*)",
   "/api/health",
   "/api/proxy/(.*)", // Proxy endpoints use their own API key auth
