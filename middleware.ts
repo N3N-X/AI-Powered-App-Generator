@@ -58,7 +58,7 @@ export default clerkMiddleware(async (auth, req) => {
   // If it's a subdomain, serve the project via /api/serve
   if (isSubdomain) {
     const url = req.nextUrl.clone();
-    url.pathname = `/api/serve/${subdomain}${req.nextUrl.pathname}`;
+    url.pathname = `/api/serve`;
     return NextResponse.rewrite(url);
   }
 
