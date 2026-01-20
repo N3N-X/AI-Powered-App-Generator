@@ -1,0 +1,46 @@
+{
+  "name": "RUX - AI-Powered App Builder",
+  "short_name": "RUX",
+  "description": "Build mobile and web apps with AI. Generate production-ready code instantly.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#8b5cf6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["productivity", "development", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Go to your dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "/favicon-96x96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "New Project",
+      "short_name": "New",
+      "description": "Create a new project",
+      "url": "/dashboard/projects?new=true",
+      "icons": [{ "src": "/favicon-96x96.png", "sizes": "96x96" }]
+    }
+  ]
+}

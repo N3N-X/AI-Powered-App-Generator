@@ -6,6 +6,11 @@ import { dark } from "@clerk/themes";
 
 import { ThemeProvider } from "@/components/shared/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
+import {
+  generateOrganizationSchema,
+  generateWebsiteSchema,
+  generateSoftwareApplicationSchema,
+} from "@/lib/seo";
 import "./globals.css";
 
 const inter = Inter({
@@ -14,64 +19,98 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "RUX - AI-Powered Mobile App Generator",
+  metadataBase: new URL("https://rux.sh"),
+  title: {
+    default: "RUX - AI-Powered App Builder for Mobile & Web",
+    template: "%s | RUX",
+  },
   description:
-    "Describe your app idea in natural language and watch RUX generate production-ready React Native + Expo code. Build iOS and Android apps with the power of AI.",
+    "Build mobile and web apps with AI. Describe your idea in natural language and RUX generates production-ready React Native, Expo, and web code instantly. Deploy in seconds.",
   keywords: [
-    "AI",
+    "AI app builder",
     "mobile app generator",
     "React Native",
     "Expo",
-    "iOS",
-    "Android",
+    "web app builder",
+    "AI development",
     "no-code",
     "low-code",
-    "app builder",
+    "iOS app builder",
+    "Android app builder",
+    "GPT app generator",
+    "Claude AI",
+    "AI coding assistant",
+    "instant deployment",
   ],
-  authors: [{ name: "RUX" }],
+  authors: [{ name: "RUX", url: "https://rux.sh" }],
   creator: "RUX",
+  publisher: "RUX",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  alternates: {
+    canonical: "https://rux.sh",
+  },
   openGraph: {
     type: "website",
     locale: "en_US",
     url: "https://rux.sh",
-    title: "RUX - AI-Powered Mobile App Generator",
+    title: "RUX - AI-Powered App Builder for Mobile & Web",
     description:
-      "Describe your app idea and generate production-ready React Native code instantly.",
+      "Build mobile and web apps with AI. Describe your idea and generate production-ready code instantly.",
     siteName: "RUX",
     images: [
       {
-        url: "/og-image.png",
+        url: "https://rux.sh/og-image.png",
         width: 1200,
         height: 630,
-        alt: "RUX - AI-Powered Mobile App Generator",
+        alt: "RUX - AI-Powered App Builder",
+        type: "image/png",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "RUX - AI-Powered Mobile App Generator",
+    title: "RUX - AI-Powered App Builder",
     description:
-      "Describe your app idea and generate production-ready React Native code instantly.",
-    images: ["/og-image.png"],
+      "Build mobile and web apps with AI. Generate production-ready code instantly.",
+    images: ["https://rux.sh/og-image.png"],
     creator: "@ruxsh",
+    site: "@ruxsh",
   },
   robots: {
     index: true,
     follow: true,
+    nocache: false,
     googleBot: {
       index: true,
       follow: true,
+      noimageindex: false,
       "max-video-preview": -1,
       "max-image-preview": "large",
       "max-snippet": -1,
     },
   },
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
     shortcut: "/favicon-16x16.png",
-    apple: "/apple-touch-icon.png",
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
   },
   manifest: "/site.webmanifest",
+  verification: {
+    google: "your-google-verification-code",
+    // yandex: "your-yandex-verification-code",
+    // bing: "your-bing-verification-code",
+  },
+  category: "technology",
 };
 
 export default function RootLayout({
@@ -105,6 +144,27 @@ export default function RootLayout({
       }}
     >
       <html lang="en" suppressHydrationWarning>
+        <head>
+          {/* Structured Data for SEO */}
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(generateOrganizationSchema()),
+            }}
+          />
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(generateWebsiteSchema()),
+            }}
+          />
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(generateSoftwareApplicationSchema()),
+            }}
+          />
+        </head>
         <body className={`${inter.variable} font-sans antialiased`}>
           <Script
             id="sl-settings"
