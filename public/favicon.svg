@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="40" height="40"><svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="40" height="40"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 40 40" height="40" width="40">
+  <defs>
+    <linearGradient y2="100%" x2="100%" y1="0%" x1="0%" id="bg">
+      <stop stop-color="#8b5cf6" offset="0%" style="--noir-inline-background-color: #2d0782;" data-noir-inline-background-color=""></stop>
+      <stop stop-color="#6366f1" offset="100%" style="--noir-inline-background-color: #0b0e7d;" data-noir-inline-background-color=""></stop>
+    </linearGradient>
+    <linearGradient y2="100%" x2="100%" y1="0%" x1="0%" id="letter">
+      <stop stop-color="#ffffff" offset="0%" style="--noir-inline-background-color: #000000;" data-noir-inline-background-color=""></stop>
+      <stop stop-color="#e0e7ff" offset="100%" style="--noir-inline-background-color: #0c0c0c;" data-noir-inline-background-color=""></stop>
+    </linearGradient>
+  </defs>
+
+  <rect fill="url(#bg)" rx="8" height="40" width="40"></rect>
+
+  
+  <path fill="none" stroke-linejoin="round" stroke-linecap="round" stroke-width="4" stroke="url(#letter)" d="M12 10 L12 30 M12 10 L23 10 C26 10 28 12 28 15.5 C28 19 25 20.5 22 20.5 L12 20.5 M19 20.5 L27 30"></path>
+</svg></svg><style>@media (prefers-color-scheme: light) { :root { filter: none; } }
+@media (prefers-color-scheme: dark) { :root { filter: none; } }
+</style><style class="noir noir-dynamic" media="screen"></style></svg>
