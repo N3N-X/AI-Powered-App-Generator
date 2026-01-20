@@ -218,7 +218,7 @@ export async function GET() {
         id: c.id,
         name: c.name,
         verified: c.verified,
-        teamId: (c.metadata as any)?.teamId,
+        teamId: (c.metadata as Record<string, unknown>)?.teamId,
         createdAt: c.createdAt,
       })),
     });

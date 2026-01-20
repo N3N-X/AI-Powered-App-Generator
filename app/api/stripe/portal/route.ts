@@ -31,7 +31,7 @@ import prisma from "@/lib/db";
  *       500:
  *         description: Failed to create billing portal session
  */
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
     // Check if Stripe is configured
     if (!stripe || !isStripeConfigured()) {

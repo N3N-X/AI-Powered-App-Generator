@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { Plan, PLAN_LIMITS, PlanLimits } from "@/types";
+import { Plan, Role, PLAN_LIMITS, PlanLimits, CREDIT_COSTS } from "@/types";
 
 interface UserProfile {
   id: string;
@@ -9,8 +9,10 @@ interface UserProfile {
   name: string | null;
   avatarUrl: string | null;
   plan: Plan;
-  dailyPromptCount: number;
-  totalPrompts: number;
+  role: Role;
+  credits: number;
+  totalCreditsUsed: number;
+  lastCreditReset: Date | null;
 }
 
 interface UserState {
@@ -18,29 +20,25 @@ interface UserState {
   user: UserProfile | null;
   isLoaded: boolean;
 
-  // Usage tracking
-  dailyUsage: number;
-  usageResetAt: Date | null;
-
   // Connected services
   hasGitHub: boolean;
   hasAppleDev: boolean;
   hasGoogleDev: boolean;
   hasExpo: boolean;
-  hasCustomClaudeKey: boolean;
+  hasCustomApiKey: boolean;
 
   // Actions
   setUser: (user: UserProfile | null) => void;
   updateUser: (updates: Partial<UserProfile>) => void;
   setIsLoaded: (loaded: boolean) => void;
-  incrementUsage: () => void;
-  resetDailyUsage: () => void;
+  useCredits: (amount: number) => boolean;
+  setCredits: (credits: number) => void;
   setConnectedServices: (services: {
     github?: boolean;
     appleDev?: boolean;
     googleDev?: boolean;
     expo?: boolean;
-    customClaudeKey?: boolean;
+    customApiKey?: boolean;
   }) => void;
   logout: () => void;
 }
@@ -51,20 +49,17 @@ export const useUserStore = create<UserState>()(
       // Initial state
       user: null,
       isLoaded: false,
-      dailyUsage: 0,
-      usageResetAt: null,
       hasGitHub: false,
       hasAppleDev: false,
       hasGoogleDev: false,
       hasExpo: false,
-      hasCustomClaudeKey: false,
+      hasCustomApiKey: false,
 
       // Actions
       setUser: (user) => {
         set({
           user,
           isLoaded: true,
-          dailyUsage: user?.dailyPromptCount || 0,
         });
       },
 
@@ -76,17 +71,28 @@ export const useUserStore = create<UserState>()(
 
       setIsLoaded: (loaded) => set({ isLoaded: loaded }),
 
-      incrementUsage: () => {
+      // Use credits - returns true if successful, false if insufficient
+      useCredits: (amount: number) => {
+        const state = get();
+        if (!state.user) return false;
+        if (state.user.credits < amount) return false;
+
         set((state) => ({
-          dailyUsage: state.dailyUsage + 1,
+          user: state.user
+            ? {
+                ...state.user,
+                credits: state.user.credits - amount,
+                totalCreditsUsed: state.user.totalCreditsUsed + amount,
+              }
+            : null,
         }));
+        return true;
       },
 
-      resetDailyUsage: () => {
-        set({
-          dailyUsage: 0,
-          usageResetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        });
+      setCredits: (credits: number) => {
+        set((state) => ({
+          user: state.user ? { ...state.user, credits } : null,
+        }));
       },
 
       setConnectedServices: (services) => {
@@ -95,8 +101,7 @@ export const useUserStore = create<UserState>()(
           hasAppleDev: services.appleDev ?? state.hasAppleDev,
           hasGoogleDev: services.googleDev ?? state.hasGoogleDev,
           hasExpo: services.expo ?? state.hasExpo,
-          hasCustomClaudeKey:
-            services.customClaudeKey ?? state.hasCustomClaudeKey,
+          hasCustomApiKey: services.customApiKey ?? state.hasCustomApiKey,
         }));
       },
 
@@ -104,34 +109,33 @@ export const useUserStore = create<UserState>()(
         set({
           user: null,
           isLoaded: false,
-          dailyUsage: 0,
-          usageResetAt: null,
           hasGitHub: false,
           hasAppleDev: false,
           hasGoogleDev: false,
           hasExpo: false,
-          hasCustomClaudeKey: false,
+          hasCustomApiKey: false,
         });
       },
     }),
     {
       name: "rux-user-store",
-      partialize: (state) => ({
-        dailyUsage: state.dailyUsage,
-        usageResetAt: state.usageResetAt,
-      }),
+      partialize: () => ({}), // Don't persist anything - always fetch fresh from server
     },
   ),
 );
 
-// Computed selectors - use these in components
-export const useRemainingPrompts = () => {
-  const user = useUserStore((state) => state.user);
-  const dailyUsage = useUserStore((state) => state.dailyUsage);
+// ============================================
+// Computed Selectors - use these in components
+// ============================================
 
-  if (!user) return 20; // Default for FREE plan
-  const limit = PLAN_LIMITS[user.plan].dailyPrompts;
-  return Math.max(0, limit - dailyUsage);
+export const useRemainingCredits = () => {
+  const user = useUserStore((state) => state.user);
+  return user?.credits ?? 0;
+};
+
+export const useTotalCreditsUsed = () => {
+  const user = useUserStore((state) => state.user);
+  return user?.totalCreditsUsed ?? 0;
 };
 
 export const usePlanLimits = (): PlanLimits => {
@@ -147,16 +151,51 @@ export const useCanUseFeature = (feature: keyof PlanLimits): boolean => {
   return typeof value === "boolean" ? value : value !== 0;
 };
 
+export const useIsAdmin = () => {
+  const user = useUserStore((state) => state.user);
+  return user?.role === "ADMIN";
+};
+
+export const useCanGenerate = () => {
+  const user = useUserStore((state) => state.user);
+  if (!user) return false;
+  return user.credits >= CREDIT_COSTS.codeGeneration;
+};
+
+export const useCanRefine = () => {
+  const user = useUserStore((state) => state.user);
+  if (!user) return false;
+  return user.credits >= CREDIT_COSTS.codeRefinement;
+};
+
+export const useCanBuild = () => {
+  const user = useUserStore((state) => state.user);
+  if (!user) return false;
+  const limits = PLAN_LIMITS[user.plan];
+  return limits.buildAccess && user.credits >= CREDIT_COSTS.buildAndroid;
+};
+
+// ============================================
 // Legacy selectors for direct state access
+// ============================================
+
 export const selectPlanLimits = (state: UserState) =>
   state.user ? PLAN_LIMITS[state.user.plan] : PLAN_LIMITS.FREE;
 
-export const selectRemainingPrompts = (state: UserState) => {
-  if (!state.user) return 20;
-  const limit = PLAN_LIMITS[state.user.plan].dailyPrompts;
-  return Math.max(0, limit - state.dailyUsage);
+export const selectRemainingCredits = (state: UserState) => {
+  return state.user?.credits ?? 0;
 };
 
 export const selectCanGenerate = (state: UserState) => {
-  return selectRemainingPrompts(state) > 0;
+  if (!state.user) return false;
+  return state.user.credits >= CREDIT_COSTS.codeGeneration;
+};
+
+export const selectCanRefine = (state: UserState) => {
+  if (!state.user) return false;
+  return state.user.credits >= CREDIT_COSTS.codeRefinement;
+};
+
+export const selectIsAdmin = (state: UserState) => {
+  return state.user?.role === "ADMIN";
 };

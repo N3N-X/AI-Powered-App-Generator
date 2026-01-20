@@ -1,5 +1,15 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import {
+  clerkMiddleware,
+  createRouteMatcher,
+  clerkClient,
+} from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+
+// Admin emails that can bypass maintenance mode
+// Add admin emails here (can also be set via ADMIN_EMAILS env var)
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "nick@rux.sh")
+  .split(",")
+  .map((e) => e.trim().toLowerCase());
 
 // Define public routes that don't require authentication
 const isPublicRoute = createRouteMatcher([
@@ -7,11 +17,17 @@ const isPublicRoute = createRouteMatcher([
   "/pricing",
   "/features",
   "/login(.*)",
-  "/signup(.*)",
   "/api/webhooks(.*)",
   "/api/health",
-  "/api/docs",
   "/api/proxy/(.*)", // Proxy endpoints use their own API key auth
+  "/api/serve(.*)", // Public serving of deployed web apps
+  "/docs(.*)", // Documentation pages
+  "/privacy", // Privacy Policy
+  "/terms", // Terms of Service
+  "/cookies", // Cookie Policy
+  "/about", // About page
+  "/contact", // Contact page
+  "/maintenance", // Maintenance page itself
 ]);
 
 // Define API routes that need special handling
@@ -26,6 +42,58 @@ const isEliteRoute = createRouteMatcher([
 
 export default clerkMiddleware(async (auth, req) => {
   const { userId, sessionClaims } = await auth();
+
+  // Check maintenance mode
+  const maintenanceMode = process.env.MAINTENANCE_MODE === "true";
+
+  if (maintenanceMode) {
+    // Allow maintenance page itself
+    if (req.nextUrl.pathname === "/maintenance") {
+      return NextResponse.next();
+    }
+
+    // Allow login pages and auth webhooks
+    if (
+      req.nextUrl.pathname.startsWith("/login") ||
+      req.nextUrl.pathname.startsWith("/api/webhooks") ||
+      req.nextUrl.pathname.startsWith("/api/clerk")
+    ) {
+      return NextResponse.next();
+    }
+
+    // Block signup during maintenance - redirect to maintenance page
+    if (req.nextUrl.pathname.startsWith("/signup")) {
+      return NextResponse.redirect(new URL("/maintenance", req.url));
+    }
+
+    // Check if user is admin by fetching email from Clerk
+    let isAdmin = false;
+
+    if (userId) {
+      try {
+        const client = await clerkClient();
+        const user = await client.users.getUser(userId);
+        const userEmail =
+          user.emailAddresses
+            .find((e) => e.id === user.primaryEmailAddressId)
+            ?.emailAddress?.toLowerCase() || "";
+
+        isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
+
+        // Debug in development
+        console.log("[Maintenance] userId:", userId);
+        console.log("[Maintenance] userEmail:", userEmail);
+        console.log("[Maintenance] isAdmin:", isAdmin);
+      } catch (error) {
+        console.error("[Maintenance] Error fetching user:", error);
+      }
+    }
+
+    // Redirect non-admin users to maintenance page
+    if (!isAdmin) {
+      return NextResponse.redirect(new URL("/maintenance", req.url));
+    }
+  }
 
   // Allow public routes
   if (isPublicRoute(req)) {

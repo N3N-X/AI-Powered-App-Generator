@@ -53,6 +53,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Validate projectId format
+    if (!/^[a-zA-Z0-9_-]{10,40}$/.test(projectId)) {
+      return NextResponse.json(
+        { error: "Invalid project ID format" },
+        { status: 400 },
+      );
+    }
+
     // Get user and project
     const user = await prisma.user.findUnique({
       where: { clerkId: userId },
@@ -116,12 +124,18 @@ export async function GET(request: NextRequest) {
       compressionOptions: { level: 9 },
     });
 
+    // Sanitize filename for Content-Disposition header
+    const safeFilename = project.slug
+      .replace(/[^a-zA-Z0-9_-]/g, "_")
+      .slice(0, 50);
+
     // Return ZIP file
     return new NextResponse(new Uint8Array(zipBuffer), {
       headers: {
         "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${project.slug}.zip"`,
+        "Content-Disposition": `attachment; filename="${safeFilename}.zip"`,
         "Content-Length": zipBuffer.length.toString(),
+        "X-Content-Type-Options": "nosniff",
       },
     });
   } catch (error) {

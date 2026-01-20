@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useProjectStore } from "@/stores/project-store";
-import { useUserStore, useRemainingPrompts } from "@/stores/user-store";
+import { useUserStore, useRemainingCredits } from "@/stores/user-store";
 import { ChatMessage } from "@/types";
 import { Send, Sparkles, User, Bot, Loader2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,9 +17,12 @@ export function ChatInterface() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isBuilding, setIsBuilding] = useState(false);
-  const [buildId, setBuildId] = useState<string | null>(null);
+  const [, setBuildId] = useState<string | null>(null);
   const [buildStatus, setBuildStatus] = useState<string | null>(null);
   const [buildUrl, setBuildUrl] = useState<string | null>(null);
+  const [progressMessage, setProgressMessage] = useState<string | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const {
     currentProject,
@@ -30,8 +33,8 @@ export function ChatInterface() {
     setCodeFiles,
   } = useProjectStore();
 
-  const { user, incrementUsage } = useUserStore();
-  const remainingPrompts = useRemainingPrompts();
+  const deductCredits = useUserStore((state) => state.useCredits);
+  const remainingCredits = useRemainingCredits();
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -66,6 +69,7 @@ export function ChatInterface() {
     });
 
     setIsGenerating(true);
+    setProgressMessage("Initializing AI generation...");
 
     try {
       const response = await fetch("/api/vibe/generate", {
@@ -81,36 +85,85 @@ export function ChatInterface() {
         throw new Error("Failed to generate code");
       }
 
-      const data = await response.json();
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
 
-      // Add assistant message using store
-      addMessage({
-        role: "assistant",
-        content:
-          data.message || "I've updated your code based on your request.",
-        model: data.model,
-        codeChanges: data.codeFiles,
-      });
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-      // Update code files
-      if (data.codeFiles) {
-        setCodeFiles({
-          ...currentProject.codeFiles,
-          ...data.codeFiles,
-        });
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const jsonStr = line.slice(6);
+              if (jsonStr === "[DONE]") continue;
+
+              try {
+                const data = JSON.parse(jsonStr);
+
+                // Handle progress updates
+                if (data.type === "progress") {
+                  setProgressMessage(data.message);
+                }
+
+                // Handle error
+                if (data.type === "error") {
+                  addMessage({
+                    role: "assistant",
+                    content: `Sorry, I encountered an error: ${data.error}. Please try again.`,
+                  });
+
+                  toast({
+                    title: "Generation failed",
+                    description: data.error,
+                    variant: "destructive",
+                  });
+                }
+
+                // Handle final result
+                if (data.type === "complete") {
+                  // Add assistant message using store
+                  addMessage({
+                    role: "assistant",
+                    content:
+                      data.message ||
+                      "I've updated your code based on your request.",
+                    model: data.model,
+                    codeChanges: data.codeFiles,
+                  });
+
+                  // Update code files
+                  if (data.codeFiles) {
+                    setCodeFiles({
+                      ...currentProject.codeFiles,
+                      ...data.codeFiles,
+                    });
+                  }
+
+                  // Deduct credits locally for immediate UI feedback
+                  // Server already deducted, this syncs local state
+                  deductCredits(100); // CREDIT_COSTS.codeGeneration
+
+                  toast({
+                    title: "Code generated",
+                    description: `${Object.keys(data.codeFiles || {}).length} files updated`,
+                  });
+
+                  // Reset build state on new generation
+                  setBuildId(null);
+                  setBuildStatus(null);
+                  setBuildUrl(null);
+                }
+              } catch (e) {
+                console.error("Failed to parse SSE data:", e);
+              }
+            }
+          }
+        }
       }
-
-      incrementUsage();
-
-      toast({
-        title: "Code generated",
-        description: `${Object.keys(data.codeFiles || {}).length} files updated`,
-      });
-
-      // Reset build state on new generation
-      setBuildId(null);
-      setBuildStatus(null);
-      setBuildUrl(null);
     } catch (error) {
       console.error("Generation error:", error);
 
@@ -129,6 +182,7 @@ export function ChatInterface() {
       });
     } finally {
       setIsGenerating(false);
+      setProgressMessage(null);
     }
   };
 
@@ -174,13 +228,36 @@ export function ChatInterface() {
     }
   };
 
-  // Poll build status
-  const pollBuildStatus = async (id: string) => {
-    const pollInterval = setInterval(async () => {
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Poll build status with proper cleanup
+  const pollBuildStatus = useCallback((id: string) => {
+    // Clear any existing polling
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+    }
+
+    pollIntervalRef.current = setInterval(async () => {
       try {
         const response = await fetch(`/api/build?buildId=${id}`);
         if (!response.ok) {
-          clearInterval(pollInterval);
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
           return;
         }
 
@@ -190,13 +267,19 @@ export function ChatInterface() {
 
         if (data.status === "finished" && data.url) {
           setBuildUrl(data.url);
-          clearInterval(pollInterval);
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
           toast({
             title: "Build complete!",
             description: "Your web preview is ready",
           });
         } else if (data.status === "errored") {
-          clearInterval(pollInterval);
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
           toast({
             title: "Build failed",
             description: data.error || "Build encountered an error",
@@ -204,14 +287,25 @@ export function ChatInterface() {
           });
         }
       } catch (error) {
-        clearInterval(pollInterval);
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
         console.error("Status check error:", error);
       }
     }, 5000); // Poll every 5 seconds
 
     // Stop polling after 10 minutes
-    setTimeout(() => clearInterval(pollInterval), 10 * 60 * 1000);
-  };
+    pollTimeoutRef.current = setTimeout(
+      () => {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      },
+      10 * 60 * 1000,
+    );
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -230,7 +324,7 @@ export function ChatInterface() {
         </div>
         <Badge variant="outline" className="text-xs">
           <Zap className="h-3 w-3 mr-1" />
-          {remainingPrompts} prompts left
+          {remainingCredits.toLocaleString()} credits
         </Badge>
       </div>
 
@@ -240,13 +334,10 @@ export function ChatInterface() {
           {messages.length === 0 ? (
             <EmptyState />
           ) : (
-            messages.map((message, index) => (
+            messages.map((message) => (
               <MessageBubble
                 key={message.id}
                 message={message}
-                isLastAssistant={
-                  index === messages.length - 1 && message.role === "assistant"
-                }
                 onBuildWebPreview={handleBuildWebPreview}
                 isBuilding={isBuilding}
                 buildStatus={buildStatus}
@@ -263,7 +354,7 @@ export function ChatInterface() {
               <div className="glass rounded-2xl rounded-tl-none px-4 py-3">
                 <div className="flex items-center gap-2 text-sm text-slate-400">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating code...
+                  {progressMessage || "Generating code..."}
                 </div>
               </div>
             </div>
@@ -303,14 +394,12 @@ export function ChatInterface() {
 
 function MessageBubble({
   message,
-  isLastAssistant,
   onBuildWebPreview,
   isBuilding,
   buildStatus,
   buildUrl,
 }: {
   message: ChatMessage;
-  isLastAssistant?: boolean;
   onBuildWebPreview?: () => void;
   isBuilding?: boolean;
   buildStatus?: string | null;

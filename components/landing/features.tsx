@@ -11,64 +11,66 @@ import {
   Zap,
   RefreshCw,
   Eye,
+  Globe,
+  Database,
 } from "lucide-react";
 
 const features = [
   {
     icon: Sparkles,
-    title: "Natural Language Input",
+    title: "AI-Powered Generation",
     description:
-      "Describe your app in plain English. Our AI understands your vision and translates it into working code.",
+      "Chat with AI to build your app. Describe features in plain English and watch them come to life instantly.",
     color: "from-violet-500 to-purple-500",
   },
   {
-    icon: Code2,
-    title: "Production-Ready Code",
+    icon: Globe,
+    title: "Multi-Platform Support",
     description:
-      "Generate clean, type-safe TypeScript code with React Native best practices built-in.",
+      "Create web apps with live subdomains, or build native iOS and Android apps with React Native—all from one platform.",
     color: "from-blue-500 to-cyan-500",
   },
   {
     icon: Eye,
-    title: "Live Preview",
+    title: "Instant Live Preview",
     description:
-      "See your app come to life in real-time. Preview on iOS and Android simulators instantly.",
+      "See changes in real-time as you build. Web apps get instant subdomains, mobile apps preview in Expo Go.",
     color: "from-emerald-500 to-teal-500",
   },
   {
-    icon: RefreshCw,
-    title: "Iterative Refinement",
+    icon: Code2,
+    title: "Full Code Access",
     description:
-      "Refine and improve your app through conversation. Just describe what you want to change.",
+      "View and edit all generated code. Built-in file explorer, code editor, and direct file management for complete control.",
     color: "from-amber-500 to-orange-500",
+  },
+  {
+    icon: Database,
+    title: "Managed API Proxies",
+    description:
+      "Access 40+ APIs without your own keys. AI models, search, maps, images, email, SMS, and more—all managed for you.",
+    color: "from-pink-500 to-rose-500",
+  },
+  {
+    icon: RefreshCw,
+    title: "Iterative Development",
+    description:
+      "Refine and improve through conversation. Add features, fix bugs, or redesign—just describe what you want changed.",
+    color: "from-cyan-500 to-blue-500",
   },
   {
     icon: Github,
     title: "GitHub Integration",
     description:
-      "Push your generated code directly to GitHub. Create repos and manage versions seamlessly.",
+      "Push your code directly to GitHub repos. Version control and collaboration built-in for professional workflows.",
     color: "from-slate-400 to-slate-600",
   },
   {
     icon: Cloud,
-    title: "Cloud Builds",
+    title: "Professional Builds",
     description:
-      "Build production APKs and IPAs with EAS. Deploy to app stores with one click.",
+      "Build production-ready APKs and IPAs with EAS Build. Deploy to app stores with enterprise-grade infrastructure.",
     color: "from-indigo-500 to-violet-500",
-  },
-  {
-    icon: Zap,
-    title: "Powered by Top AI",
-    description:
-      "Leverage Claude and Grok for intelligent code generation. Choose your preferred AI model.",
-    color: "from-pink-500 to-rose-500",
-  },
-  {
-    icon: Shield,
-    title: "Secure by Design",
-    description:
-      "End-to-end encryption for your credentials. Your API keys and dev accounts are always protected.",
-    color: "from-red-500 to-orange-500",
   },
 ];
 
@@ -98,19 +100,20 @@ export function LandingFeatures() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
-            className="text-3xl sm:text-4xl font-bold text-white"
+            className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white"
           >
-            Everything You Need to Build Apps
+            Complete Platform for AI App Development
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto"
+            className="mt-4 text-lg text-gray-600 dark:text-slate-400 max-w-2xl mx-auto"
           >
-            From idea to app store, RUX provides all the tools you need to bring
-            your mobile app vision to life.
+            From idea to production. Generate code with AI, preview instantly,
+            access managed APIs, and deploy to web or app stores—everything you
+            need in one powerful platform.
           </motion.p>
         </div>
 
@@ -128,7 +131,7 @@ export function LandingFeatures() {
               variants={item}
               className="group relative"
             >
-              <div className="glass rounded-2xl p-6 h-full hover:bg-white/[0.08] transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-violet-500/5">
+              <div className="bg-white/60 dark:bg-white/5 backdrop-blur-xl border border-gray-200/50 dark:border-white/10 rounded-2xl p-6 h-full hover:bg-white/80 dark:hover:bg-white/[0.08] transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-violet-500/10">
                 {/* Icon */}
                 <div
                   className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${feature.color} shadow-lg mb-4`}
@@ -137,10 +140,10 @@ export function LandingFeatures() {
                 </div>
 
                 {/* Content */}
-                <h3 className="text-lg font-semibold text-white mb-2">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                   {feature.title}
                 </h3>
-                <p className="text-sm text-slate-400 leading-relaxed">
+                <p className="text-sm text-gray-600 dark:text-slate-400 leading-relaxed">
                   {feature.description}
                 </p>
               </div>

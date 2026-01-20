@@ -8,23 +8,24 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
-// Rate limiters for different plans
+// Rate limiters for different plans (requests per minute to prevent abuse)
+// Credits are handled separately in the database
 const rateLimiters: Record<Plan, Ratelimit> = {
   FREE: new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(PLAN_LIMITS.FREE.dailyPrompts, "1 d"),
+    limiter: Ratelimit.slidingWindow(10, "1 m"), // 10 requests per minute
     prefix: "rux:ratelimit:free",
     analytics: true,
   }),
   PRO: new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(PLAN_LIMITS.PRO.dailyPrompts, "1 d"),
+    limiter: Ratelimit.slidingWindow(30, "1 m"), // 30 requests per minute
     prefix: "rux:ratelimit:pro",
     analytics: true,
   }),
   ELITE: new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(PLAN_LIMITS.ELITE.dailyPrompts, "1 d"),
+    limiter: Ratelimit.slidingWindow(60, "1 m"), // 60 requests per minute
     prefix: "rux:ratelimit:elite",
     analytics: true,
   }),
@@ -56,12 +57,20 @@ export interface RateLimitResult {
   limit: number;
 }
 
+// Rate limits per plan (requests per minute)
+const planRateLimits: Record<Plan, number> = {
+  FREE: 10,
+  PRO: 30,
+  ELITE: 60,
+};
+
 /**
  * Check rate limit for a user based on their plan
+ * This is for request throttling, not credit management
  */
 export async function checkPlanRateLimit(
   userId: string,
-  plan: Plan
+  plan: Plan,
 ): Promise<RateLimitResult> {
   const limiter = rateLimiters[plan];
   const result = await limiter.limit(userId);
@@ -70,7 +79,7 @@ export async function checkPlanRateLimit(
     success: result.success,
     remaining: result.remaining,
     reset: result.reset,
-    limit: PLAN_LIMITS[plan].dailyPrompts,
+    limit: planRateLimits[plan],
   };
 }
 
@@ -79,7 +88,7 @@ export async function checkPlanRateLimit(
  */
 export async function checkApiRateLimit(
   identifier: string,
-  endpoint: keyof typeof apiRateLimiters
+  endpoint: keyof typeof apiRateLimiters,
 ): Promise<RateLimitResult> {
   const limiter = apiRateLimiters[endpoint];
   const result = await limiter.limit(identifier);
@@ -93,11 +102,12 @@ export async function checkApiRateLimit(
 }
 
 /**
- * Get current usage for a user
+ * Get current rate limit usage for a user (requests per minute)
+ * For credits usage, check the database directly
  */
 export async function getCurrentUsage(
   userId: string,
-  plan: Plan
+  plan: Plan,
 ): Promise<{ used: number; limit: number; resetAt: Date }> {
   const key = `rux:usage:${userId}`;
 
@@ -106,7 +116,7 @@ export async function getCurrentUsage(
     redis.ttl(key),
   ]);
 
-  const limit = PLAN_LIMITS[plan].dailyPrompts;
+  const limit = planRateLimits[plan];
   const resetAt = new Date(Date.now() + (resetTime > 0 ? resetTime * 1000 : 0));
 
   return {
@@ -139,7 +149,7 @@ export async function incrementUsage(userId: string): Promise<number> {
  */
 export async function checkPriorityQueue(
   userId: string,
-  plan: Plan
+  plan: Plan,
 ): Promise<boolean> {
   if (!PLAN_LIMITS[plan].priorityQueue) {
     return false;
@@ -158,7 +168,7 @@ export async function checkPriorityQueue(
 export async function setTemporaryData(
   key: string,
   data: unknown,
-  ttlSeconds: number = 300
+  ttlSeconds: number = 300,
 ): Promise<void> {
   await redis.setex(`rux:temp:${key}`, ttlSeconds, JSON.stringify(data));
 }
@@ -177,7 +187,7 @@ export async function getTemporaryData<T>(key: string): Promise<T | null> {
  */
 export async function addToBuildQueue(
   buildId: string,
-  priority: boolean
+  priority: boolean,
 ): Promise<number> {
   const queue = priority ? "rux:builds:priority" : "rux:builds:standard";
   return await redis.rpush(queue, buildId);
@@ -185,7 +195,7 @@ export async function addToBuildQueue(
 
 export async function getNextBuild(): Promise<string | null> {
   // Check priority queue first
-  let buildId = await redis.lpop<string>("rux:builds:priority");
+  const buildId = await redis.lpop<string>("rux:builds:priority");
   if (buildId) return buildId;
 
   // Then standard queue

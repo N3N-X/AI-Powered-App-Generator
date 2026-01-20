@@ -159,7 +159,7 @@ export function SettingsModal() {
         throw new Error("Failed to save Claude key");
       }
 
-      setConnectedServices({ customClaudeKey: true });
+      setConnectedServices({ customApiKey: true });
       setClaudeKey("");
       toast({
         title: "Claude API key saved",
@@ -221,15 +221,15 @@ export function SettingsModal() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="glass rounded-lg p-4">
                     <p className="text-2xl font-bold text-white">
-                      {user?.dailyPromptCount || 0}
+                      {user?.credits?.toLocaleString() || 0}
                     </p>
-                    <p className="text-sm text-slate-400">Prompts today</p>
+                    <p className="text-sm text-slate-400">Credits remaining</p>
                   </div>
                   <div className="glass rounded-lg p-4">
                     <p className="text-2xl font-bold text-white">
-                      {user?.totalPrompts || 0}
+                      {user?.totalCreditsUsed?.toLocaleString() || 0}
                     </p>
-                    <p className="text-sm text-slate-400">Total prompts</p>
+                    <p className="text-sm text-slate-400">Total credits used</p>
                   </div>
                 </div>
               </div>
@@ -509,7 +509,7 @@ export function SettingsModal() {
             {user?.plan === "ELITE" && (
               <div className="text-center py-4">
                 <p className="text-sm text-slate-400">
-                  You're on the highest plan. Thank you for your support!
+                  You&apos;re on the highest plan. Thank you for your support!
                 </p>
               </div>
             )}

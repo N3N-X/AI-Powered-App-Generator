@@ -110,7 +110,14 @@ export async function POST(req: Request) {
 
     try {
       // Check if plan was updated in metadata
-      const plan = (public_metadata as any)?.plan;
+      const metadataPlan = (public_metadata as Record<string, unknown>)?.plan;
+      // Validate plan is a valid Plan enum value
+      const validPlans = ["FREE", "PRO", "ELITE"] as const;
+      const plan =
+        typeof metadataPlan === "string" &&
+        validPlans.includes(metadataPlan as (typeof validPlans)[number])
+          ? (metadataPlan as "FREE" | "PRO" | "ELITE")
+          : undefined;
 
       await prisma.user.upsert({
         where: { clerkId: id },
@@ -150,7 +157,7 @@ export async function POST(req: Request) {
       });
 
       console.log(`User deleted: ${id}`);
-    } catch (error) {
+    } catch {
       // User might not exist in our DB
       console.log(`User not found for deletion: ${id}`);
     }

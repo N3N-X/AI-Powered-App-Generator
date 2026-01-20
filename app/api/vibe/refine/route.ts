@@ -5,7 +5,7 @@ import prisma from "@/lib/db";
 import { generateCode, getModelForPlan, canUseModel } from "@/lib/ai";
 import { checkPlanRateLimit, incrementUsage } from "@/lib/rate-limit";
 import { decrypt } from "@/lib/encrypt";
-import { RefineRequestSchema, Plan, CodeFiles } from "@/types";
+import { RefineRequestSchema, Plan, CodeFiles, CREDIT_COSTS } from "@/types";
 
 /**
  * @swagger
@@ -96,6 +96,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    // Check credits
+    const creditCost = CREDIT_COSTS.codeRefinement;
+    if (user.credits < creditCost) {
+      return NextResponse.json(
+        {
+          error: "Insufficient credits",
+          required: creditCost,
+          available: user.credits,
+          message: `You need ${creditCost} credits to refine code. You have ${user.credits} credits remaining.`,
+        },
+        { status: 402 },
+      );
+    }
+
     // Check rate limit
     const rateLimit = await checkPlanRateLimit(user.id, user.plan as Plan);
     if (!rateLimit.success) {
@@ -176,12 +190,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Update usage
+    // Deduct credits
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        dailyPromptCount: { increment: 1 },
-        totalPrompts: { increment: 1 },
+        credits: { decrement: creditCost },
+        totalCreditsUsed: { increment: creditCost },
       },
     });
 

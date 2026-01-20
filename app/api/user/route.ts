@@ -1,13 +1,15 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import prisma from "@/lib/db";
+import { PLAN_LIMITS, Plan } from "@/types";
 
 /**
  * @swagger
  * /api/user:
  *   get:
  *     summary: Get current user data from database
- *     description: Retrieves the current user's data. If the user doesn't exist, it creates them. Also resets daily prompt count if it's a new day.
+ *     description: Retrieves the current user's data. If the user doesn't exist, it creates them. Also handles monthly credit reset for paid plans.
  *     responses:
  *       200:
  *         description: User data retrieved successfully
@@ -31,18 +33,16 @@ import prisma from "@/lib/db";
  *                       type: string
  *                     plan:
  *                       type: string
- *                     dailyPromptCount:
+ *                     role:
+ *                       type: string
+ *                     credits:
  *                       type: integer
- *                     totalPrompts:
+ *                     totalCreditsUsed:
  *                       type: integer
  *                     hasGitHub:
  *                       type: boolean
- *                     hasCustomClaudeKey:
+ *                     hasCustomApiKey:
  *                       type: boolean
- *                     stripeCustomerId:
- *                       type: string
- *                     stripeSubscriptionId:
- *                       type: string
  *       401:
  *         description: Unauthorized
  *       404:
@@ -50,7 +50,7 @@ import prisma from "@/lib/db";
  *       500:
  *         description: Failed to fetch user
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -79,25 +79,34 @@ export async function GET(request: NextRequest) {
             : null,
           avatarUrl: clerkUser.imageUrl,
           plan: "FREE",
-          dailyPromptCount: 0,
-          totalPrompts: 0,
+          role: "USER",
+          credits: PLAN_LIMITS.FREE.monthlyCredits, // 3000 for free tier
+          totalCreditsUsed: 0,
         },
       });
     }
 
-    // Check if we need to reset daily prompt count (new day)
-    const now = new Date();
-    const lastReset = new Date(user.lastPromptReset);
-    const isNewDay = now.toDateString() !== lastReset.toDateString();
+    // Check if we need to reset credits for paid plans (monthly reset)
+    const plan = user.plan as Plan;
+    const planLimits = PLAN_LIMITS[plan];
 
-    if (isNewDay) {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          dailyPromptCount: 0,
-          lastPromptReset: now,
-        },
-      });
+    if (planLimits.creditsRefresh && user.lastCreditReset) {
+      const now = new Date();
+      const lastReset = new Date(user.lastCreditReset);
+      const monthsSinceReset =
+        (now.getFullYear() - lastReset.getFullYear()) * 12 +
+        (now.getMonth() - lastReset.getMonth());
+
+      // Reset credits if it's been at least a month
+      if (monthsSinceReset >= 1) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            credits: planLimits.monthlyCredits,
+            lastCreditReset: now,
+          },
+        });
+      }
     }
 
     return NextResponse.json({
@@ -108,10 +117,12 @@ export async function GET(request: NextRequest) {
         name: user.name,
         avatarUrl: user.avatarUrl,
         plan: user.plan,
-        dailyPromptCount: user.dailyPromptCount,
-        totalPrompts: user.totalPrompts,
+        role: user.role,
+        credits: user.credits,
+        totalCreditsUsed: user.totalCreditsUsed,
+        lastCreditReset: user.lastCreditReset,
         hasGitHub: !!user.githubTokenEncrypted,
-        hasCustomClaudeKey: !!user.claudeKeyEncrypted,
+        hasCustomApiKey: !!user.claudeKeyEncrypted,
         stripeCustomerId: user.stripeCustomerId,
         stripeSubscriptionId: user.stripeSubscriptionId,
       },
@@ -120,6 +131,78 @@ export async function GET(request: NextRequest) {
     console.error("User fetch error:", error);
     return NextResponse.json(
       { error: "Failed to fetch user" },
+      { status: 500 },
+    );
+  }
+}
+
+// Update user profile
+const UpdateUserSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+});
+
+/**
+ * @swagger
+ * /api/user:
+ *   patch:
+ *     summary: Update current user's profile
+ *     description: Updates the current user's profile information.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Failed to update user
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const data = UpdateUserSchema.parse(body);
+
+    const user = await prisma.user.update({
+      where: { clerkId: userId },
+      data: {
+        ...(data.name && { name: data.name }),
+        updatedAt: new Date(),
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      },
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Validation error", details: error.errors },
+        { status: 400 },
+      );
+    }
+
+    console.error("User update error:", error);
+    return NextResponse.json(
+      { error: "Failed to update user" },
       { status: 500 },
     );
   }

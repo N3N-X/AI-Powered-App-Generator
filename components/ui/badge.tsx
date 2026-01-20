@@ -20,17 +20,18 @@ const badgeVariants = cva(
           "border-transparent bg-amber-500/20 text-amber-400 border-amber-500/30",
         info: "border-transparent bg-blue-500/20 text-blue-400 border-blue-500/30",
         premium:
-          "border-transparent bg-gradient-to-r from-violet-500/20 to-indigo-500/20 text-violet-300 border-violet-500/30",
+          "border-transparent bg-gradient-to-r from-violet-500/20 to-indigo-500/20 text-violet-700 dark:text-violet-300 border-violet-500/30",
       },
     },
     defaultVariants: {
       variant: "default",
     },
-  }
+  },
 );
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends
+    React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof badgeVariants> {}
 
 function Badge({ className, variant, ...props }: BadgeProps) {

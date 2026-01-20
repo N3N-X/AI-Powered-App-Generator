@@ -13,6 +13,17 @@ enum Plan {
   ELITE
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Platform {
+  WEB
+  IOS
+  ANDROID
+}
+
 enum BuildStatus {
   PENDING
   QUEUED
@@ -34,6 +45,7 @@ model User {
   name                  String?
   avatarUrl             String?
   plan                  Plan      @default(FREE)
+  role                  Role      @default(USER)
 
   // Stripe billing
   stripeCustomerId      String?   @unique
@@ -43,10 +55,10 @@ model User {
   githubTokenEncrypted  String?
   claudeKeyEncrypted    String?
 
-  // Usage tracking
-  dailyPromptCount      Int       @default(0)
-  lastPromptReset       DateTime  @default(now())
-  totalPrompts          Int       @default(0)
+  // Credit system (replaces daily prompts)
+  credits               Int       @default(3000)  // Free tier starts with 3k
+  totalCreditsUsed      Int       @default(0)
+  lastCreditReset       DateTime?                 // For monthly reset on paid plans
 
   // Timestamps
   createdAt             DateTime  @default(now())
@@ -68,6 +80,7 @@ model Project {
   name        String
   description String?
   slug        String
+  platform    Platform @default(WEB)
 
   // Code storage - JSONB for flexible file structure
   codeFiles   Json     @default("{}") // { "App.tsx": "...", "screens/Home.tsx": "..." }
@@ -78,6 +91,11 @@ model Project {
   // GitHub integration
   githubRepo  String?
   githubUrl   String?
+
+  // Domain settings (WEB platform only)
+  subdomain       String?   @unique  // e.g., "myapp" -> myapp.rux.sh
+  customDomain    String?   @unique  // e.g., "myapp.com"
+  domainVerified  Boolean   @default(false)  // Custom domain verified via DNS
 
   // Timestamps
   createdAt   DateTime @default(now())
@@ -92,6 +110,8 @@ model Project {
 
   @@unique([userId, slug])
   @@index([userId])
+  @@index([subdomain])
+  @@index([customDomain])
 }
 
 model PromptHistory {
@@ -193,14 +213,63 @@ model WaitlistEntry {
 // ============================================
 
 enum ProxyService {
-  OPENAI
-  MAPS
-  EMAIL
-  SMS
-  STORAGE
-  DATABASE
-  PUSH
-  ANALYTICS
+  // AI Models
+  XAI           // Grok - Primary AI
+  OPENAI        // GPT-4, GPT-4o
+  ANTHROPIC     // Claude
+  GOOGLE_AI     // Gemini
+  GROQ          // Fast inference
+  COHERE        // Command models
+  MISTRAL       // Mistral models
+  PERPLEXITY    // Search-augmented AI
+
+  // Image Generation
+  DALL_E        // OpenAI DALL-E 3
+  STABLE_DIFFUSION  // Stability AI
+  MIDJOURNEY    // Midjourney API
+  FLUX          // Flux models
+
+  // Search & Data
+  GOOGLE_SEARCH // Web search
+  IMAGE_SEARCH  // Image search
+  PLACES        // Google Places
+  MAPS          // Maps & directions
+  SERP          // SERP API
+
+  // Media Processing
+  TRANSCRIBE    // Audio transcription (Whisper)
+  TTS           // Text-to-speech
+  VIDEO         // Video processing
+  PDF           // PDF generation
+  OCR           // Optical character recognition
+
+  // Communication
+  EMAIL         // Resend/SendGrid
+  SMS           // Twilio
+  PUSH          // Push notifications
+  WHATSAPP      // WhatsApp Business
+
+  // Data & Utilities
+  STORAGE       // File storage (R2/S3)
+  DATABASE      // Managed Postgres
+  ANALYTICS     // Event tracking
+  QR_CODE       // QR generation
+  WEATHER       // Weather data
+  TRANSLATE     // Translation
+  CURRENCY      // Currency conversion
+
+  // Validation & Verification
+  EMAIL_VALIDATE  // Email verification
+  PHONE_VALIDATE  // Phone validation
+  DOMAIN_WHOIS    // Domain lookup
+
+  // Content APIs
+  NEWS          // News API
+  STOCKS        // Stock market data
+  CRYPTO        // Cryptocurrency data
+  MOVIES        // Movies/TV data (TMDB)
+  BOOKS         // Book search
+  SPORTS        // Sports data
 }
 
 model ProjectApiKey {

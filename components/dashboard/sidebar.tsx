@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -111,6 +112,7 @@ function ProjectsList({
   searchQuery,
   setSearchQuery,
 }: ProjectsListProps) {
+  const router = useRouter();
   const { openModal } = useUIStore();
   const { setCurrentProject } = useProjectStore();
 
@@ -120,6 +122,7 @@ function ProjectsList({
       if (response.ok) {
         const data = await response.json();
         setCurrentProject(data.project);
+        router.push("/dashboard/generate");
       }
     } catch (error) {
       console.error("Failed to load project:", error);

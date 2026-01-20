@@ -2,12 +2,16 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/db";
+import { Prisma } from "@prisma/client";
+
+// Validate file paths to prevent path traversal attacks
+const safeFilePathRegex = /^[a-zA-Z0-9_\-./]+$/;
 
 const updateProjectSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
-  codeFiles: z.record(z.string()).optional(),
-  appConfig: z.any().optional(),
+  codeFiles: z.record(z.string(), z.string().max(1000000)).optional(),
+  appConfig: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -169,18 +173,43 @@ export async function PATCH(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    // Sanitize codeFiles to prevent path traversal
+    let sanitizedCodeFiles: Record<string, string> | undefined;
+    if (data.codeFiles) {
+      sanitizedCodeFiles = {};
+      for (const [path, content] of Object.entries(data.codeFiles)) {
+        // Only allow safe file paths (no path traversal, reasonable length)
+        if (
+          safeFilePathRegex.test(path) &&
+          path.length <= 200 &&
+          !path.includes("..")
+        ) {
+          sanitizedCodeFiles[path] = content;
+        }
+      }
+      // If no valid files, don't update codeFiles
+      if (Object.keys(sanitizedCodeFiles).length === 0) {
+        sanitizedCodeFiles = undefined;
+      }
+    }
+
+    // Build update data
+    const updateData: Prisma.ProjectUpdateInput = {
+      updatedAt: new Date(),
+    };
+
+    if (data.name) updateData.name = data.name;
+    if (data.description !== undefined)
+      updateData.description = data.description;
+    if (sanitizedCodeFiles)
+      updateData.codeFiles = sanitizedCodeFiles as Prisma.InputJsonValue;
+    if (data.appConfig)
+      updateData.appConfig = data.appConfig as Prisma.InputJsonValue;
+
     // Update project
     const project = await prisma.project.update({
       where: { id },
-      data: {
-        ...(data.name && { name: data.name }),
-        ...(data.description !== undefined && {
-          description: data.description,
-        }),
-        ...(data.codeFiles && { codeFiles: data.codeFiles }),
-        ...(data.appConfig && { appConfig: data.appConfig }),
-        updatedAt: new Date(),
-      },
+      data: updateData,
     });
 
     return NextResponse.json({ project });

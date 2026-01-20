@@ -70,12 +70,12 @@ export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
       // Theme
-      theme: "dark",
+      theme: "system",
       setTheme: (theme) => set({ theme }),
 
       // Sidebar
       sidebarOpen: true,
-      sidebarTab: "files",
+      sidebarTab: "projects",
       sidebarWidth: 280,
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       toggleSidebar: () =>

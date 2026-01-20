@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
+
 import { ThemeProvider } from "@/components/shared/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
@@ -104,9 +106,19 @@ export default function RootLayout({
     >
       <html lang="en" suppressHydrationWarning>
         <body className={`${inter.variable} font-sans antialiased`}>
+          <Script
+            id="sl-settings"
+            strategy="beforeInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `(function() {
+                window.SLSettings = window.SLSettings || {};
+                window.SLSettings.showSLButton = false;
+              })();`,
+            }}
+          />
           <ThemeProvider
             attribute="class"
-            defaultTheme="dark"
+            defaultTheme="system"
             enableSystem
             disableTransitionOnChange
           >

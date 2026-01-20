@@ -3,10 +3,24 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useProjectStore } from "@/stores/project-store";
 import { useUIStore } from "@/stores/ui-store";
-import { Sparkles, Plus, Folder, ArrowRight, Zap, Code2, Smartphone } from "lucide-react";
+import {
+  Sparkles,
+  Plus,
+  Folder,
+  ArrowRight,
+  Zap,
+  Code2,
+  Smartphone,
+} from "lucide-react";
 import { slugify, generateId } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
@@ -96,11 +110,12 @@ export function WelcomeScreen() {
           <div className="inline-flex p-4 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 shadow-lg shadow-violet-500/25 mb-4">
             <Sparkles className="h-10 w-10 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-black dark:text-white">
             Welcome to RUX
           </h1>
-          <p className="text-slate-400 max-w-md mx-auto">
-            Create a new project to start building your mobile app with AI assistance.
+          <p className="text-gray-600 dark:text-slate-400 max-w-md mx-auto">
+            Create a new project to start building your mobile app with AI
+            assistance.
           </p>
         </div>
 
@@ -108,7 +123,7 @@ export function WelcomeScreen() {
         <Card glass className="p-6">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                 Project Name
               </label>
               <div className="flex gap-3">
@@ -178,8 +193,9 @@ export function WelcomeScreen() {
 
         {/* Quick tips */}
         <div className="text-center">
-          <p className="text-sm text-slate-500">
-            Tip: Describe your app in natural language and let AI generate the code for you.
+          <p className="text-sm text-gray-600 dark:text-slate-500">
+            Tip: Describe your app in natural language and let AI generate the
+            code for you.
           </p>
         </div>
       </div>

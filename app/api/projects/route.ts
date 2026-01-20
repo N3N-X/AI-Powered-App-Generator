@@ -3,11 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/db";
 import { slugify } from "@/lib/utils";
+import {
+  generateSubdomainFromName,
+  RESERVED_SUBDOMAINS,
+} from "@/lib/subdomain";
 
 const createProjectSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
   template: z.string().optional(),
+  platform: z.enum(["WEB", "IOS", "ANDROID"]).default("WEB"),
 });
 
 /**
@@ -66,7 +71,12 @@ export async function GET() {
             name: true,
             slug: true,
             description: true,
+            platform: true,
+            subdomain: true,
+            customDomain: true,
+            domainVerified: true,
             githubRepo: true,
+            codeFiles: true,
             createdAt: true,
             updatedAt: true,
           },
@@ -192,7 +202,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Get template code if specified
-    const codeFiles = getTemplateCode(data.template);
+    const codeFiles = getTemplateCode(data.template, data.platform);
+
+    // Auto-assign subdomain for WEB projects
+    let subdomain: string | null = null;
+    if (data.platform === "WEB") {
+      // Generate unique subdomain
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      while (attempts < maxAttempts) {
+        const candidate = generateSubdomainFromName(data.name);
+
+        // Check if reserved or already taken
+        if (!RESERVED_SUBDOMAINS.has(candidate)) {
+          const existing = await prisma.project.findUnique({
+            where: { subdomain: candidate },
+          });
+
+          if (!existing) {
+            subdomain = candidate;
+            break;
+          }
+        }
+        attempts++;
+      }
+    }
 
     // Create project
     const project = await prisma.project.create({
@@ -200,8 +235,10 @@ export async function POST(request: NextRequest) {
         name: data.name,
         description: data.description,
         slug,
+        platform: data.platform,
         codeFiles,
         userId: user.id,
+        subdomain,
         appConfig: {
           name: data.name,
           slug,
@@ -227,7 +264,56 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function getTemplateCode(template?: string): Record<string, string> {
+function getTemplateCode(
+  template?: string,
+  platform: "WEB" | "IOS" | "ANDROID" = "WEB",
+): Record<string, string> {
+  // Web template uses React
+  if (platform === "WEB") {
+    return {
+      "App.tsx": `import React from 'react';
+
+export default function App() {
+  return (
+    <div style={styles.container}>
+      <div style={styles.content}>
+        <h1 style={styles.title}>Welcome to Your App</h1>
+        <p style={styles.subtitle}>Start building something amazing!</p>
+      </div>
+    </div>
+  );
+}
+
+const styles: { [key: string]: React.CSSProperties } = {
+  container: {
+    minHeight: '100vh',
+    backgroundColor: '#fff',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  content: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+  },
+};
+`,
+    };
+  }
+
+  // Mobile template uses React Native
   const baseTemplate = {
     "App.tsx": `import React from 'react';
 import { SafeAreaView, StyleSheet, Text, View } from 'react-native';

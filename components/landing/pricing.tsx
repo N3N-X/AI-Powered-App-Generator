@@ -66,6 +66,29 @@ const plans = [
   },
 ];
 
+const container = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.2,
+    },
+  },
+};
+
+const item = {
+  hidden: { opacity: 0, y: 20 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.5,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
+
 export function LandingPricing() {
   return (
     <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8">
@@ -77,7 +100,7 @@ export function LandingPricing() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5 }}
-            className="text-3xl sm:text-4xl font-bold text-white"
+            className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white"
           >
             Simple, Transparent Pricing
           </motion.h2>
@@ -86,24 +109,27 @@ export function LandingPricing() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto"
+            className="mt-4 text-lg text-gray-600 dark:text-slate-400 max-w-2xl mx-auto"
           >
             Start free and upgrade as you grow. No hidden fees, cancel anytime.
           </motion.p>
         </div>
 
         {/* Pricing cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-6">
-          {plans.map((plan, index) => (
+        <motion.div
+          variants={container}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true }}
+          className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-6"
+        >
+          {plans.map((plan) => (
             <motion.div
               key={plan.name}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
+              variants={item}
               className={cn(
                 "relative rounded-2xl",
-                plan.highlighted && "lg:-mt-4 lg:mb-4"
+                plan.highlighted && "lg:-mt-4 lg:mb-4",
               )}
             >
               {/* Highlight glow */}
@@ -113,10 +139,10 @@ export function LandingPricing() {
 
               <div
                 className={cn(
-                  "relative h-full rounded-2xl p-8",
+                  "relative h-full rounded-2xl p-8 transition-all duration-300",
                   plan.highlighted
-                    ? "bg-slate-900 border border-violet-500/50"
-                    : "glass"
+                    ? "bg-white/80 dark:bg-slate-900 border border-violet-500/50 shadow-xl shadow-violet-500/10 dark:shadow-violet-500/20"
+                    : "bg-white/60 dark:bg-white/5 backdrop-blur-xl border border-gray-200/50 dark:border-white/10 hover:bg-white/80 dark:hover:bg-white/[0.08]",
                 )}
               >
                 {/* Badge */}
@@ -132,20 +158,22 @@ export function LandingPricing() {
 
                 {/* Plan header */}
                 <div className="mb-6">
-                  <h3 className="text-xl font-semibold text-white">
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
                     {plan.name}
                   </h3>
-                  <p className="text-sm text-slate-400 mt-1">
+                  <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">
                     {plan.description}
                   </p>
                 </div>
 
                 {/* Price */}
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-white">
+                  <span className="text-4xl font-bold text-gray-900 dark:text-white">
                     {plan.price}
                   </span>
-                  <span className="text-slate-400 ml-2">/{plan.period}</span>
+                  <span className="text-gray-600 dark:text-slate-400 ml-2">
+                    /{plan.period}
+                  </span>
                 </div>
 
                 {/* CTA */}
@@ -161,15 +189,17 @@ export function LandingPricing() {
                 <ul className="space-y-3">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-3">
-                      <Check className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
-                      <span className="text-sm text-slate-300">{feature}</span>
+                      <Check className="h-5 w-5 text-emerald-500 dark:text-emerald-400 shrink-0 mt-0.5" />
+                      <span className="text-sm text-gray-700 dark:text-slate-300">
+                        {feature}
+                      </span>
                     </li>
                   ))}
                 </ul>
               </div>
             </motion.div>
           ))}
-        </div>
+        </motion.div>
 
         {/* FAQ link */}
         <motion.p
@@ -177,10 +207,13 @@ export function LandingPricing() {
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5, delay: 0.4 }}
-          className="text-center mt-12 text-slate-400"
+          className="text-center mt-12 text-gray-600 dark:text-slate-400"
         >
           Have questions?{" "}
-          <Link href="/pricing#faq" className="text-violet-400 hover:underline">
+          <Link
+            href="/pricing#faq"
+            className="text-violet-600 dark:text-violet-400 hover:underline"
+          >
             Check our FAQ
           </Link>
         </motion.p>

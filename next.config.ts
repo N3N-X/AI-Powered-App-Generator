@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
     "expo",
     "@expo/vector-icons",
   ],
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
       "react-native$": "react-native-web",
@@ -20,6 +20,19 @@ const nextConfig: NextConfig = {
       ".web.tsx",
       ...config.resolve.extensions,
     ];
+
+    // Handle formidable and other node modules that don't work in browser
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        child_process: false,
+        dns: false,
+      };
+    }
+
     return config;
   },
   experimental: {

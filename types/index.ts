@@ -27,6 +27,12 @@ export type AIModel = z.infer<typeof AIModelEnum>;
 // User Types
 // ============================================
 
+export const RoleEnum = z.enum(["USER", "ADMIN"]);
+export type Role = z.infer<typeof RoleEnum>;
+
+export const PlatformEnum = z.enum(["WEB", "IOS", "ANDROID"]);
+export type Platform = z.infer<typeof PlatformEnum>;
+
 export const UserSchema = z.object({
   id: z.string(),
   clerkId: z.string(),
@@ -34,8 +40,10 @@ export const UserSchema = z.object({
   name: z.string().nullable(),
   avatarUrl: z.string().nullable(),
   plan: PlanEnum,
-  dailyPromptCount: z.number(),
-  totalPrompts: z.number(),
+  role: RoleEnum,
+  credits: z.number(),
+  totalCreditsUsed: z.number(),
+  lastCreditReset: z.date().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -152,7 +160,9 @@ export type RefineRequest = z.infer<typeof RefineRequestSchema>;
 export const BuildRequestSchema = z.object({
   projectId: z.string(),
   platform: BuildPlatformEnum,
-  profile: z.enum(["development", "preview", "production"]).default("production"),
+  profile: z
+    .enum(["development", "preview", "production"])
+    .default("production"),
 });
 export type BuildRequest = z.infer<typeof BuildRequestSchema>;
 
@@ -211,52 +221,82 @@ export const ChatMessageSchema = z.object({
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
 // ============================================
-// Plan Limits
+// Plan Limits (Credits aligned with createanything.com)
 // ============================================
 
 export interface PlanLimits {
-  dailyPrompts: number;
+  monthlyCredits: number;
+  creditsRefresh: boolean; // Whether credits reset monthly
   maxProjects: number;
   maxFilesPerProject: number;
   priorityQueue: boolean;
   githubIntegration: boolean;
   buildAccess: boolean;
-  customClaudeKey: boolean;
+  customApiKey: boolean; // Can use own API keys
+  privateProjects: boolean;
+  removeBranding: boolean;
   defaultModel: AIModel;
 }
 
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   FREE: {
-    dailyPrompts: 20,
+    monthlyCredits: 3000, // One-time, no monthly reset
+    creditsRefresh: false,
     maxProjects: 3,
     maxFilesPerProject: 20,
     priorityQueue: false,
     githubIntegration: false,
     buildAccess: false,
-    customClaudeKey: false,
+    customApiKey: false,
+    privateProjects: false,
+    removeBranding: false,
     defaultModel: "grok",
   },
   PRO: {
-    dailyPrompts: 100,
+    monthlyCredits: 20000, // Resets monthly
+    creditsRefresh: true,
     maxProjects: 20,
     maxFilesPerProject: 100,
     priorityQueue: true,
     githubIntegration: true,
     buildAccess: true,
-    customClaudeKey: false,
+    customApiKey: false,
+    privateProjects: true,
+    removeBranding: true,
     defaultModel: "grok",
   },
   ELITE: {
-    dailyPrompts: 500,
+    monthlyCredits: 50000, // Resets monthly
+    creditsRefresh: true,
     maxProjects: -1, // unlimited
     maxFilesPerProject: -1,
     priorityQueue: true,
     githubIntegration: true,
     buildAccess: true,
-    customClaudeKey: true,
-    defaultModel: "claude",
+    customApiKey: true,
+    privateProjects: true,
+    removeBranding: true,
+    defaultModel: "grok",
   },
 };
+
+// ============================================
+// Credit Costs per Operation
+// ============================================
+
+export const CREDIT_COSTS = {
+  // Code generation (AI)
+  codeGeneration: 100, // Per generation request
+  codeRefinement: 50, // Per refinement
+
+  // Builds
+  buildAndroid: 500, // Per Android build
+  buildIOS: 500, // Per iOS build
+
+  // Other operations
+  exportProject: 0, // Free
+  githubPush: 10, // Per push
+} as const;
 
 // ============================================
 // File Tree Types
@@ -287,7 +327,7 @@ export class AppError extends Error {
   constructor(
     message: string,
     public code: string,
-    public statusCode: number = 400
+    public statusCode: number = 400,
   ) {
     super(message);
     this.name = "AppError";

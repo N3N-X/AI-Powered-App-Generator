@@ -216,7 +216,7 @@ export async function GET() {
         id: c.id,
         name: c.name,
         verified: c.verified,
-        packageName: (c.metadata as any)?.packageName,
+        packageName: (c.metadata as Record<string, unknown>)?.packageName,
         createdAt: c.createdAt,
       })),
     });

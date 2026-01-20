@@ -8,10 +8,14 @@ interface Project {
   name: string;
   description: string | null;
   slug: string;
+  platform: "WEB" | "IOS" | "ANDROID";
   codeFiles: CodeFiles;
   appConfig: AppConfig | null;
   githubRepo: string | null;
   githubUrl: string | null;
+  subdomain: string | null;
+  customDomain: string | null;
+  domainVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
