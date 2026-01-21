@@ -1212,7 +1212,21 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
                   isPreviewFullscreen && "rounded-none border-0",
                 )}
               >
-                {previewMode === "web" ? (
+                {/* Show empty state if no code files yet */}
+                {!currentProject.codeFiles ||
+                Object.keys(currentProject.codeFiles).length === 0 ? (
+                  <div className="h-full flex items-center justify-center bg-slate-900">
+                    <div className="text-center text-slate-400">
+                      <Smartphone className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-white font-medium mb-2">
+                        Start building to see your app
+                      </p>
+                      <p className="text-sm">
+                        Describe what you want to build in the chat
+                      </p>
+                    </div>
+                  </div>
+                ) : previewMode === "web" ? (
                   // Web Preview (runs in browser)
                   webPreviewUrl ? (
                     <iframe
