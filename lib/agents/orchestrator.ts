@@ -181,7 +181,28 @@ async function generateCode(
   const workerPrompt = getWorkerPrompt(platform, context.apiBaseUrl);
 
   // Create detailed prompt for worker
-  const userPrompt = `Build this app based on the spec:
+  const isRefinement =
+    context.existingCode && Object.keys(context.existingCode).length > 0;
+
+  const userPrompt = isRefinement
+    ? `REFINEMENT REQUEST - ADD TO EXISTING APP (DO NOT REPLACE!)
+
+## EXISTING CODE (PRESERVE ALL OF THIS):
+${JSON.stringify(context.existingCode, null, 2)}
+
+## USER'S REQUEST:
+"${context.userPrompt}"
+
+## CRITICAL INSTRUCTIONS:
+1. KEEP ALL EXISTING SCREENS AND FUNCTIONALITY - do not remove anything!
+2. ADD the new feature/screen the user requested
+3. UPDATE App.tsx to include any new screens in navigation
+4. UPDATE any existing screens if needed to integrate with new features
+5. Return ALL files - both existing (possibly modified) AND new files
+
+You must return the COMPLETE app with all existing files + new additions.
+Return as JSON with all file paths as keys.`
+    : `Build this app based on the spec:
 
 ${JSON.stringify(spec, null, 2)}
 
