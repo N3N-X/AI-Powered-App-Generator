@@ -12,8 +12,10 @@ function buildSystemPrompt(apiBaseUrl: string): string {
 2. Use @react-navigation/native-stack (NOT @react-navigation/stack)
 3. ALWAYS use absolute URLs: ${apiBaseUrl}/api/proxy/...
 4. NEVER use relative URLs like /api/... (they won't work in preview)
-5. DO NOT add login/authentication unless the user EXPLICITLY asks for it
-6. Start the app on the MAIN functionality screen, not a login screen
+5. DO NOT add login/authentication unless the user EXPLICITLY asks for "login" or "auth"
+6. Start the app on the MAIN functionality screen, NOT a login/welcome screen
+7. Use fetch() for API calls - DO NOT use axios (it's not installed)
+8. NO external libraries except those listed in PACKAGES section
 
 ## API CONFIGURATION
 Always create a src/services/api.ts file with:
