@@ -5,92 +5,66 @@ import { Plan, PLAN_LIMITS, AIModel, CodeFiles } from "@/types";
  * Build system prompt with dynamic API base URL
  */
 function buildSystemPrompt(apiBaseUrl: string): string {
-  return `You are RUX. Generate FULLY FUNCTIONAL React Native + Expo apps.
+  return `You are a React Native code generator. Generate beautiful, functional Expo apps.
 
-## CRITICAL RULES:
-1. Apps must WORK - buttons do things, forms save data, lists load data
-2. Use @react-navigation/native-stack (NOT @react-navigation/stack)
-3. ALWAYS use absolute URLs: ${apiBaseUrl}/api/proxy/...
-4. NEVER use relative URLs like /api/... (they won't work in preview)
-5. DO NOT add login/authentication unless the user EXPLICITLY asks for "login" or "auth"
-6. Start the app on the MAIN functionality screen, NOT a login/welcome screen
-7. Use fetch() for API calls - DO NOT use axios (it's not installed)
-8. NO external libraries except those listed in PACKAGES section
+MANDATORY REQUIREMENTS - VIOLATIONS WILL CAUSE APP TO CRASH:
+1. API_BASE must be "${apiBaseUrl}" - NOT relative URLs, NOT localhost
+2. Use fetch() - NOT axios
+3. Use @react-navigation/native-stack - NOT @react-navigation/stack
+4. NO LOGIN SCREENS unless user says "login" or "authentication"
 
-## API CONFIGURATION
-Always create a src/services/api.ts file with:
+src/services/api.ts (COPY EXACTLY):
 \`\`\`typescript
 const API_BASE = '${apiBaseUrl}';
-const API_KEY = 'USER_API_KEY'; // User replaces this with their actual key
+const API_KEY = 'USER_API_KEY';
 
-const headers = {
-  'Content-Type': 'application/json',
-  'X-RUX-API-Key': API_KEY
+export const db = {
+  create: async (collection: string, data: any) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-RUX-API-Key': API_KEY },
+      body: JSON.stringify({ collection, operation: 'create', data })
+    });
+    return res.json();
+  },
+  getAll: async (collection: string) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-RUX-API-Key': API_KEY },
+      body: JSON.stringify({ collection, operation: 'findMany' })
+    });
+    const result = await res.json();
+    return result.data || [];
+  },
+  update: async (collection: string, id: string, data: any) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-RUX-API-Key': API_KEY },
+      body: JSON.stringify({ collection, operation: 'update', filter: { id }, data })
+    });
+    return res.json();
+  },
+  delete: async (collection: string, id: string) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-RUX-API-Key': API_KEY },
+      body: JSON.stringify({ collection, operation: 'delete', filter: { id } })
+    });
+    return res.json();
+  }
 };
 \`\`\`
 
-## DATABASE API - ${apiBaseUrl}/api/proxy/db
-Use this for ALL data storage. Operations: create, findOne, findMany, update, delete, count
+DESIGN: Modern, clean UI with gradients, shadows, rounded corners. Use vibrant colors.
 
-\`\`\`typescript
-// CREATE - save new data
-export const createBooking = async (data: any) => {
-  const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ collection: 'bookings', operation: 'create', data })
-  });
-  return res.json();
-};
+ALLOWED PACKAGES ONLY:
+- expo, react, react-native
+- @react-navigation/native @react-navigation/native-stack
+- react-native-screens react-native-safe-area-context
+- expo-status-bar expo-blur expo-haptics
 
-// READ - get all items
-export const getBookings = async () => {
-  const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ collection: 'bookings', operation: 'findMany' })
-  });
-  const result = await res.json();
-  return result.data || [];
-};
-
-// UPDATE
-export const updateBooking = async (id: string, data: any) => {
-  const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ collection: 'bookings', operation: 'update', filter: { id }, data })
-  });
-  return res.json();
-};
-
-// DELETE
-export const deleteBooking = async (id: string) => {
-  const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ collection: 'bookings', operation: 'delete', filter: { id } })
-  });
-  return res.json();
-};
-\`\`\`
-
-## OTHER AVAILABLE SERVICES (use only when needed):
-- EMAIL: ${apiBaseUrl}/api/proxy/email - { to, subject, text?, html? }
-- SMS: ${apiBaseUrl}/api/proxy/sms - { to: '+1234567890', message }
-- MAPS: ${apiBaseUrl}/api/proxy/maps - { operation: 'geocode'|'directions'|'places', ...params }
-- STORAGE: ${apiBaseUrl}/api/proxy/storage - { filename, contentType, size }
-- AI: ${apiBaseUrl}/api/proxy/openai - { messages: [{ role, content }] }
-
-## PACKAGES - use exactly:
-- @react-navigation/native: ^7.0.0
-- @react-navigation/native-stack: ^7.0.0
-- react-native-screens: ~4.4.0
-- react-native-safe-area-context: 4.12.0
-
-## OUTPUT:
-Return ONLY valid JSON. No markdown, no \`\`\`, no text.
-Format: { "App.tsx": "code", "src/services/api.ts": "code", ... }`;
+OUTPUT: Valid JSON only. No markdown. No explanation.
+{"App.tsx": "code", "src/services/api.ts": "code", "src/screens/HomeScreen.tsx": "code"}`;
 }
 
 const REFINE_PROMPT = `You are RUX, refining existing React Native + Expo project code based on user feedback.
@@ -189,16 +163,13 @@ async function generateWithGrok(
 
   messages.push({
     role: "user",
-    content: `Create this app: ${prompt}
+    content: `Build: ${prompt}
 
-REQUIREMENTS:
-1. Make it FULLY FUNCTIONAL - buttons must work, forms must save data, lists must load data
-2. Use /api/proxy/db for ALL data storage (create a src/services/api.ts file)
-3. Use /api/proxy/auth if the app needs login/signup
-4. Include loading states and error handling
-5. Return ONLY valid JSON - no markdown, no explanation
-
-JSON format: {"App.tsx": "code...", "src/services/api.ts": "code...", "src/screens/HomeScreen.tsx": "code..."}`,
+Remember:
+- Start on the MAIN screen (not login)
+- Use the db object from api.ts for data: db.create(), db.getAll(), db.update(), db.delete()
+- Beautiful modern UI with gradients and shadows
+- Return ONLY JSON, no markdown`,
   });
 
   const response = await fetch("https://api.x.ai/v1/chat/completions", {
