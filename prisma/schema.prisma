@@ -252,7 +252,8 @@ enum ProxyService {
 
   // Data & Utilities
   STORAGE       // File storage (R2/S3)
-  DATABASE      // Managed Postgres
+  DATABASE      // Generic database proxy for any data
+  APP_AUTH      // User authentication for generated apps
   ANALYTICS     // Event tracking
   QR_CODE       // QR generation
   WEATHER       // Weather data
@@ -386,6 +387,103 @@ model StorageFile {
   @@unique([bucket, key])
   @@index([projectId])
   @@index([userId])
+}
+
+// ============================================
+// Generic Database Proxy - Stores any data for generated apps
+// ============================================
+
+model AppCollection {
+  id          String   @id @default(cuid())
+  name        String   // Collection name (e.g., "bookings", "todos", "products")
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  projectId   String
+  documents   AppDocument[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+}
+
+model AppDocument {
+  id          String   @id @default(cuid())
+  data        Json     // The actual document data (any structure)
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  collectionId String
+  collection   AppCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([collectionId])
+  @@index([collectionId, createdAt])
+}
+
+// ============================================
+// App User Authentication - Users of generated apps
+// ============================================
+
+model AppUser {
+  id            String   @id @default(cuid())
+  email         String
+  passwordHash  String   // bcrypt hashed password
+  name          String?
+  avatarUrl     String?
+  metadata      Json?    // Any additional user data
+
+  // Email verification
+  emailVerified Boolean  @default(false)
+  verifyToken   String?
+
+  // Password reset
+  resetToken    String?
+  resetExpires  DateTime?
+
+  // Status
+  active        Boolean  @default(true)
+  lastLoginAt   DateTime?
+
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  projectId     String
+  sessions      AppSession[]
+
+  @@unique([projectId, email])
+  @@index([projectId])
+  @@index([email])
+  @@index([verifyToken])
+  @@index([resetToken])
+}
+
+model AppSession {
+  id          String   @id @default(cuid())
+  token       String   @unique // Session token (hashed)
+  userAgent   String?
+  ipAddress   String?
+
+  // Expiration
+  expiresAt   DateTime
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  lastActiveAt DateTime @default(now())
+
+  // Relations
+  appUserId   String
+  appUser     AppUser  @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([appUserId])
+  @@index([expiresAt])
 }
 
 // ============================================

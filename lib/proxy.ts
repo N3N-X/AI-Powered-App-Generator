@@ -310,6 +310,7 @@ const proxyRateLimiters: Record<ProxyService, Ratelimit> = {
   // Data & Utilities
   storage: createRateLimiter("storage", RATE_LIMITS.utility),
   database: createRateLimiter("database", RATE_LIMITS.utility),
+  app_auth: createRateLimiter("app_auth", 60), // 60 auth requests/min
   analytics: createRateLimiter("analytics", RATE_LIMITS.utility),
   qr_code: createRateLimiter("qr_code", RATE_LIMITS.utility),
   weather: createRateLimiter("weather", RATE_LIMITS.utility),

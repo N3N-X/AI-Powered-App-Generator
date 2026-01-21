@@ -7,6 +7,19 @@ import {
   generateSubdomainFromName,
   RESERVED_SUBDOMAINS,
 } from "@/lib/subdomain";
+import { generateApiKey } from "@/lib/proxy";
+import { ProxyService } from "@prisma/client";
+
+// Default services for auto-generated API keys
+const DEFAULT_PROJECT_SERVICES: ProxyService[] = [
+  ProxyService.DATABASE,
+  ProxyService.APP_AUTH,
+  ProxyService.EMAIL,
+  ProxyService.SMS,
+  ProxyService.MAPS,
+  ProxyService.STORAGE,
+  ProxyService.OPENAI,
+];
 
 const createProjectSchema = z.object({
   name: z.string().min(1).max(100),
@@ -247,7 +260,25 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ project }, { status: 201 });
+    // Auto-generate API key for the project
+    const { rawKey, keyPrefix } = await generateApiKey(
+      project.id,
+      "Auto-generated",
+      DEFAULT_PROJECT_SERVICES,
+    );
+
+    return NextResponse.json(
+      {
+        project,
+        apiKey: {
+          key: rawKey,
+          keyPrefix,
+          services: DEFAULT_PROJECT_SERVICES,
+          warning: "Save this key securely - it will not be shown again!",
+        },
+      },
+      { status: 201 },
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

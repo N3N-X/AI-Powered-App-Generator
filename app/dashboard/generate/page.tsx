@@ -27,7 +27,6 @@ import {
   Apple,
 } from "lucide-react";
 import { Platform } from "@/types";
-// import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
 export default function GenerateStartPage() {
@@ -110,7 +109,7 @@ export default function GenerateStartPage() {
 
       toast({
         title: "Project created",
-        description: `${projectName} is ready to build`,
+        description: `${projectName} is ready to build. API key created automatically.`,
       });
 
       // Navigate to the new project

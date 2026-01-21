@@ -1,300 +1,78 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Plan, PLAN_LIMITS, AIModel, CodeFiles } from "@/types";
 
-// System prompt for code generation with platform-specific design guidelines
-const SYSTEM_PROMPT = `You are RUX, an expert React Native + Expo developer. You generate complete, production-ready mobile app code based on user descriptions.
+/**
+ * Build system prompt with dynamic API base URL
+ */
+function buildSystemPrompt(apiBaseUrl: string): string {
+  return `You are RUX. Generate FULLY FUNCTIONAL React Native + Expo apps.
 
-## Platform-Specific Design Guidelines:
+## CRITICAL RULES:
+1. Apps must WORK - buttons do things, forms save data, lists load data
+2. Use @react-navigation/native-stack (NOT @react-navigation/stack)
+3. ALWAYS use absolute URLs: ${apiBaseUrl}/api/proxy/...
+4. NEVER use relative URLs like /api/... (they won't work in preview)
 
-### iOS - Apple Liquid Glass Design (iOS 18+):
-- Use SF Pro font family (system default)
-- Implement glassmorphism effects with blur and transparency
-- Use subtle shadows and depth
-- Follow Apple's Human Interface Guidelines
-- Use iOS-specific components where appropriate
-- Implement haptic feedback for interactions
-- Use system colors that adapt to light/dark mode
-- Rounded corners with large radius (12-20px)
-- Subtle gradients and glass-like surfaces
-- Respect safe areas and notch
-
-### Android - Material Design 3 / Material You:
-- Use Roboto font family (system default)
-- Implement Material You dynamic color theming
-- Use elevation and shadows for depth
-- Follow Material Design guidelines
-- Use Android-specific patterns (FAB, Bottom sheets, etc.)
-- Implement ripple effects for touch feedback
-- Use Material color schemes
-- Rounded corners (12-16px)
-- Support edge-to-edge display
-
-## Your Capabilities:
-- Generate React Native + Expo code that works on both iOS and Android
-- Create complete Expo project structures with all necessary files
-- Include app configuration, package setup, and proper file organization
-- Follow React Native best practices and patterns
-- Use modern TypeScript with proper typing
-- Implement responsive layouts with StyleSheet
-- Use Platform.OS to apply platform-specific styles
-
-## Code Generation Rules:
-1. Always use TypeScript (.tsx for components, .ts for utilities)
-2. Use functional components with hooks
-3. Include proper error handling and input validation
-4. Add meaningful comments for complex logic
-5. Use Expo SDK features appropriately
-6. Implement proper navigation with @react-navigation/native
-7. Follow atomic design principles (atoms, molecules, organisms)
-8. NEVER hardcode sensitive data (API keys, passwords, etc.)
-9. Use environment variables for configuration
-10. Implement proper loading and error states
-11. Use Platform.select() for platform-specific code
-12. Implement proper keyboard handling
-
-## API and Data Handling - CRITICAL:
-⚠️ NEVER use external APIs directly! Always use RUX proxy endpoints.
-
-### Available RUX Proxy Services:
-RUX provides managed API access through proxy endpoints. Users don't need their own API keys.
-
-**AI & Chat:**
-- \`/api/proxy/xai\` - xAI Grok (PRIMARY/DEFAULT AI - 8 credits per 1K tokens)
-- \`/api/proxy/openai\` - OpenAI GPT-4, GPT-4o (10 credits per 1K tokens)
-
-**Image Generation:**
-- \`/api/proxy/images/generate\` - DALL-E 3 / Stable Diffusion (50 credits per image)
-
-**Search & Maps:**
-- \`/api/proxy/search\` - Google Search (5 credits per search)
-- \`/api/proxy/maps\` - Geocoding, Places, Directions (3 credits per request)
-
-**Communication:**
-- \`/api/proxy/email\` - Send emails (2 credits per email)
-- \`/api/proxy/sms\` - Send SMS (5 credits per SMS)
-
-**Data & Utilities:**
-- \`/api/proxy/weather\` - Weather data (2 credits per request)
-- \`/api/proxy/qr\` - Generate QR codes (1 credit)
-- \`/api/proxy/translate\` - Translation (3 credits)
-- \`/api/proxy/currency\` - Exchange rates (1 credit)
-- \`/api/proxy/storage\` - File storage (5 credits per MB)
-
-**Content:**
-- \`/api/proxy/news\` - News articles (3 credits)
-- \`/api/proxy/stocks\` - Stock data (2 credits)
-- \`/api/proxy/crypto\` - Crypto prices (2 credits)
-- \`/api/proxy/movies\` - Movie/TV data (2 credits)
-
-**Media Processing:**
-- \`/api/proxy/audio/transcribe\` - Audio transcription (15 credits per minute)
-- \`/api/proxy/audio/tts\` - Text-to-speech (10 credits)
-
-### Proxy Usage Pattern (MANDATORY):
+## API CONFIGURATION
+Always create a src/services/api.ts file with:
 \`\`\`typescript
-// CORRECT - Using xAI (default AI)
-const response = await fetch('/api/proxy/xai', {
+const API_BASE = '${apiBaseUrl}';
+const API_KEY = 'USER_API_KEY'; // User replaces this with their actual key
+\`\`\`
+
+## AVAILABLE PROXY SERVICES (all use POST with JSON body):
+
+### 1. DATABASE - ${apiBaseUrl}/api/proxy/db
+Store any data. Operations: create, findOne, findMany, update, delete, count
+\`\`\`typescript
+// Create
+fetch(\`\${API_BASE}/api/proxy/db\`, {
   method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'X-RUX-API-Key': apiKey  // Required authentication
-  },
-  body: JSON.stringify({
-    messages: [
-      { role: 'system', content: 'You are a helpful assistant.' },
-      { role: 'user', content: userInput }
-    ],
-    model: 'grok-3-fast-beta',
-    temperature: 0.7
-  })
+  headers: { 'Content-Type': 'application/json', 'X-RUX-API-Key': API_KEY },
+  body: JSON.stringify({ collection: 'items', operation: 'create', data: { name: 'Test' } })
 });
-
-if (!response.ok) {
-  const error = await response.json();
-  throw new Error(error.error || 'API request failed');
-}
-
-const data = await response.json();
-console.log('Credits used:', data.creditsUsed);
-console.log('Credits remaining:', data.creditsRemaining);
-
-// WRONG - NEVER do this:
-// fetch('https://api.openai.com/v1/...') ❌
-// fetch('https://api.x.ai/v1/...') ❌
+// Read all
+fetch(\`\${API_BASE}/api/proxy/db\`, { method: 'POST', headers: {...}, body: JSON.stringify({ collection: 'items', operation: 'findMany' }) });
+// Update
+fetch(\`\${API_BASE}/api/proxy/db\`, { method: 'POST', headers: {...}, body: JSON.stringify({ collection: 'items', operation: 'update', filter: { id }, data: { name: 'Updated' } }) });
+// Delete
+fetch(\`\${API_BASE}/api/proxy/db\`, { method: 'POST', headers: {...}, body: JSON.stringify({ collection: 'items', operation: 'delete', filter: { id } }) });
 \`\`\`
 
-### Example: Weather App
+### 2. AUTH - ${apiBaseUrl}/api/proxy/auth
+User authentication. Operations: signup, login, logout, me, updateProfile, changePassword
 \`\`\`typescript
-async function getWeather(city: string, apiKey: string) {
-  try {
-    const response = await fetch('/api/proxy/weather', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-RUX-API-Key': apiKey
-      },
-      body: JSON.stringify({
-        city,
-        units: 'metric'
-      })
-    });
+// Signup: { operation: 'signup', email, password, name }
+// Login: { operation: 'login', email, password } -> returns { token, user }
+// Get current user: { operation: 'me', token }
+\`\`\`
 
-    if (!response.ok) {
-      throw new Error('Weather fetch failed');
-    }
+### 3. EMAIL - ${apiBaseUrl}/api/proxy/email
+Send emails via SendGrid: { to, subject, text?, html? }
 
-    return await response.json();
-  } catch (error) {
-    console.error('Error:', error);
-    return null;
-  }
+### 4. SMS - ${apiBaseUrl}/api/proxy/sms
+Send SMS via Twilio: { to: '+1234567890', message }
+
+### 5. MAPS - ${apiBaseUrl}/api/proxy/maps
+Google Maps API: { operation: 'geocode'|'directions'|'places', ...params }
+
+### 6. STORAGE - ${apiBaseUrl}/api/proxy/storage
+File uploads: POST { filename, contentType, size } -> returns uploadUrl
+
+### 7. AI - ${apiBaseUrl}/api/proxy/openai
+OpenAI chat: { messages: [{ role, content }], model?: 'gpt-4o-mini' }
+
+## PACKAGES - use exactly:
+- @react-navigation/native: ^7.0.0
+- @react-navigation/native-stack: ^7.0.0
+- react-native-screens: ~4.4.0
+- react-native-safe-area-context: 4.12.0
+- expo-secure-store: ~14.0.0
+
+## OUTPUT:
+Return ONLY valid JSON. No markdown, no \`\`\`, no text.
+Format: { "App.tsx": "code", "src/services/api.ts": "code", ... }`;
 }
-\`\`\`
-
-### Error Handling:
-- Always wrap proxy calls in try-catch
-- Check response.ok before parsing JSON
-- Display user-friendly error messages
-- Show credit costs to users
-- Handle 402 (insufficient credits) gracefully
-- Handle 429 (rate limited) with retry logic
-- Implement loading states during API calls
-
-## Security Best Practices:
-- Validate all user inputs
-- Sanitize data before display
-- Use secure storage for sensitive data (expo-secure-store)
-- Implement proper authentication flows
-- Never expose API keys in client code
-- Use HTTPS for all network requests
-
-## Required Project Files (ALWAYS include these):
-1. App.tsx - Main entry with navigation setup and providers
-2. app.json - Complete Expo configuration with iOS/Android specific settings
-3. package.json - All dependencies with correct versions
-4. tsconfig.json - TypeScript configuration
-5. babel.config.js - Babel configuration
-6. src/constants/theme.ts - Theme configuration with platform-specific styles
-7. src/constants/colors.ts - Color palette for both platforms
-
-## Mandatory File Structure:
-\`\`\`
-/
-├── App.tsx                    # Entry point with providers
-├── app.json                   # Expo config
-├── package.json               # Dependencies
-├── tsconfig.json              # TypeScript config
-├── babel.config.js            # Babel config
-├── src/
-│   ├── screens/               # Screen components
-│   │   ├── HomeScreen.tsx
-│   │   └── ...
-│   ├── components/            # Reusable components
-│   │   ├── ui/               # Basic UI components
-│   │   │   ├── Button.tsx
-│   │   │   ├── Card.tsx
-│   │   │   ├── Input.tsx
-│   │   │   └── GlassView.tsx  # Glassmorphism component
-│   │   └── ...
-│   ├── navigation/            # Navigation configuration
-│   │   └── AppNavigator.tsx
-│   ├── hooks/                 # Custom hooks
-│   │   └── useTheme.ts
-│   ├── services/              # API and external services
-│   │   └── api.ts            # API service using proxy
-│   ├── store/                 # State management
-│   ├── utils/                 # Utility functions
-│   │   └── platform.ts       # Platform-specific utilities
-│   ├── constants/             # App constants
-│   │   ├── theme.ts          # Theme with platform styles
-│   │   └── colors.ts         # Color palette
-│   └── types/                 # TypeScript definitions
-│       └── index.ts
-└── assets/                    # Images, fonts, etc.
-\`\`\`
-
-## UI Component Examples:
-
-### Glass Card Component (iOS Liquid Glass):
-\`\`\`typescript
-import { View, StyleSheet, Platform } from 'react-native';
-import { BlurView } from 'expo-blur';
-
-export function GlassCard({ children }) {
-  if (Platform.OS === 'ios') {
-    return (
-      <BlurView intensity={80} tint="light" style={styles.glass}>
-        {children}
-      </BlurView>
-    );
-  }
-  // Android fallback with semi-transparent background
-  return (
-    <View style={[styles.glass, styles.androidGlass]}>
-      {children}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  glass: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  androidGlass: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    elevation: 4,
-  },
-});
-\`\`\`
-
-### Material Button (Android):
-\`\`\`typescript
-import { Pressable, Text, StyleSheet, Platform } from 'react-native';
-
-export function MaterialButton({ title, onPress }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.button,
-        pressed && styles.pressed,
-      ]}
-      android_ripple={{ color: 'rgba(0,0,0,0.1)' }}
-    >
-      <Text style={styles.text}>{title}</Text>
-    </Pressable>
-  );
-}
-\`\`\`
-
-## Response Format - MANDATORY:
-You MUST return a valid JSON object with MULTIPLE files. Minimum 10 files required.
-
-MANDATORY FILES (must include ALL of these):
-1. "App.tsx" - Main app entry point with providers
-2. "package.json" - All dependencies
-3. "app.json" - Expo configuration
-4. "tsconfig.json" - TypeScript config
-5. "babel.config.js" - Babel configuration
-6. "src/constants/theme.ts" - Theme configuration
-7. "src/constants/colors.ts" - Color palette
-8. "src/components/ui/GlassView.tsx" - Glassmorphism component
-9. At least 2 screen components
-10. Navigation setup
-
-## CRITICAL REQUIREMENTS:
-⚠️ MINIMUM 10 FILES REQUIRED - Responses with less than 10 files will be REJECTED
-⚠️ NEVER return just "App.tsx" alone
-⚠️ Create a PROPER file structure with src/ directory
-⚠️ Split code into logical, reusable components
-⚠️ All imports MUST have corresponding files
-⚠️ Include platform-specific styling
-⚠️ Return ONLY valid JSON - no markdown, no explanations
-
-Return ONLY the JSON object with file paths as keys and file contents as values.`;
 
 const REFINE_PROMPT = `You are RUX, refining existing React Native + Expo project code based on user feedback.
 
@@ -359,6 +137,7 @@ interface GenerateOptions {
   model: AIModel;
   userClaudeKey?: string;
   platform?: Platform;
+  apiBaseUrl?: string;
 }
 
 interface AIResponse {
@@ -391,7 +170,16 @@ async function generateWithGrok(
 
   messages.push({
     role: "user",
-    content: prompt,
+    content: `Create this app: ${prompt}
+
+REQUIREMENTS:
+1. Make it FULLY FUNCTIONAL - buttons must work, forms must save data, lists must load data
+2. Use /api/proxy/db for ALL data storage (create a src/services/api.ts file)
+3. Use /api/proxy/auth if the app needs login/signup
+4. Include loading states and error handling
+5. Return ONLY valid JSON - no markdown, no explanation
+
+JSON format: {"App.tsx": "code...", "src/services/api.ts": "code...", "src/screens/HomeScreen.tsx": "code..."}`,
   });
 
   const response = await fetch("https://api.x.ai/v1/chat/completions", {
@@ -401,7 +189,7 @@ async function generateWithGrok(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "grok-3-fast-beta",
+      model: "grok-code-fast-1",
       messages: [{ role: "system", content: systemPrompt }, ...messages],
       temperature: 0.7,
       max_tokens: 32768,
@@ -525,15 +313,8 @@ function parseCodeResponse(content: string): CodeFiles {
       );
     }
 
-    // Ensure minimum file structure
-    if (fileCount < 5) {
-      console.warn(
-        `AI only generated ${fileCount} file(s). Adding required structure.`,
-      );
-      return ensureMinimumStructure(codeFiles);
-    }
-
-    return codeFiles;
+    // Only add config files if missing, never override AI-generated code
+    return ensureConfigFiles(codeFiles);
   } catch (error) {
     // Strategy 3: Try to extract code if it looks like React Native code
     if (content.includes("import") && content.includes("from 'react")) {
@@ -546,7 +327,7 @@ function parseCodeResponse(content: string): CodeFiles {
         cleanedCode.includes("export default") ||
         cleanedCode.includes("export function App")
       ) {
-        return ensureMinimumStructure({
+        return ensureConfigFiles({
           "App.tsx": cleanedCode,
         });
       }
@@ -560,12 +341,12 @@ function parseCodeResponse(content: string): CodeFiles {
 }
 
 /**
- * Ensure minimum file structure is present
+ * Only add essential config files if missing - never override AI-generated code
  */
-function ensureMinimumStructure(codeFiles: CodeFiles): CodeFiles {
+function ensureConfigFiles(codeFiles: CodeFiles): CodeFiles {
   const result = { ...codeFiles };
 
-  // Add package.json if missing
+  // Only add package.json if missing
   if (!result["package.json"]) {
     result["package.json"] = JSON.stringify(
       {
@@ -601,7 +382,7 @@ function ensureMinimumStructure(codeFiles: CodeFiles): CodeFiles {
     );
   }
 
-  // Add app.json if missing
+  // Only add app.json if missing
   if (!result["app.json"]) {
     result["app.json"] = JSON.stringify(
       {
@@ -610,28 +391,9 @@ function ensureMinimumStructure(codeFiles: CodeFiles): CodeFiles {
           slug: "rux-app",
           version: "1.0.0",
           orientation: "portrait",
-          icon: "./assets/icon.png",
           userInterfaceStyle: "automatic",
-          splash: {
-            image: "./assets/splash.png",
-            resizeMode: "contain",
-            backgroundColor: "#1a1a2e",
-          },
-          assetBundlePatterns: ["**/*"],
-          ios: {
-            supportsTablet: true,
-            bundleIdentifier: "com.rux.app",
-          },
-          android: {
-            adaptiveIcon: {
-              foregroundImage: "./assets/adaptive-icon.png",
-              backgroundColor: "#1a1a2e",
-            },
-            package: "com.rux.app",
-          },
-          web: {
-            favicon: "./assets/favicon.png",
-          },
+          ios: { supportsTablet: true },
+          android: { adaptiveIcon: { backgroundColor: "#1a1a2e" } },
         },
       },
       null,
@@ -639,214 +401,21 @@ function ensureMinimumStructure(codeFiles: CodeFiles): CodeFiles {
     );
   }
 
-  // Add tsconfig.json if missing
+  // Only add tsconfig.json if missing
   if (!result["tsconfig.json"]) {
     result["tsconfig.json"] = JSON.stringify(
-      {
-        extends: "expo/tsconfig.base",
-        compilerOptions: {
-          strict: true,
-          esModuleInterop: true,
-          skipLibCheck: true,
-          baseUrl: ".",
-          paths: {
-            "@/*": ["src/*"],
-          },
-        },
-      },
+      { extends: "expo/tsconfig.base", compilerOptions: { strict: true } },
       null,
       2,
     );
   }
 
-  // Add babel.config.js if missing
+  // Only add babel.config.js if missing
   if (!result["babel.config.js"]) {
     result["babel.config.js"] = `module.exports = function(api) {
   api.cache(true);
-  return {
-    presets: ['babel-preset-expo'],
-  };
+  return { presets: ['babel-preset-expo'] };
 };`;
-  }
-
-  // Add theme.ts if missing
-  if (!result["src/constants/theme.ts"]) {
-    result["src/constants/theme.ts"] =
-      `import { Platform, StyleSheet } from 'react-native';
-
-export const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-};
-
-export const BORDER_RADIUS = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  full: 9999,
-};
-
-export const SHADOWS = Platform.select({
-  ios: {
-    small: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-    },
-    medium: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.15,
-      shadowRadius: 8,
-    },
-  },
-  android: {
-    small: { elevation: 2 },
-    medium: { elevation: 4 },
-  },
-});
-
-export const FONTS = Platform.select({
-  ios: {
-    regular: { fontFamily: 'System', fontWeight: '400' as const },
-    medium: { fontFamily: 'System', fontWeight: '500' as const },
-    semibold: { fontFamily: 'System', fontWeight: '600' as const },
-    bold: { fontFamily: 'System', fontWeight: '700' as const },
-  },
-  android: {
-    regular: { fontFamily: 'Roboto', fontWeight: '400' as const },
-    medium: { fontFamily: 'Roboto', fontWeight: '500' as const },
-    semibold: { fontFamily: 'Roboto', fontWeight: '600' as const },
-    bold: { fontFamily: 'Roboto', fontWeight: '700' as const },
-  },
-});
-`;
-  }
-
-  // Add colors.ts if missing
-  if (!result["src/constants/colors.ts"]) {
-    result["src/constants/colors.ts"] = `export const COLORS = {
-  // Primary
-  primary: '#8B5CF6',
-  primaryLight: '#A78BFA',
-  primaryDark: '#7C3AED',
-
-  // Secondary
-  secondary: '#6366F1',
-  secondaryLight: '#818CF8',
-  secondaryDark: '#4F46E5',
-
-  // Neutral
-  white: '#FFFFFF',
-  black: '#000000',
-  gray: {
-    50: '#F9FAFB',
-    100: '#F3F4F6',
-    200: '#E5E7EB',
-    300: '#D1D5DB',
-    400: '#9CA3AF',
-    500: '#6B7280',
-    600: '#4B5563',
-    700: '#374151',
-    800: '#1F2937',
-    900: '#111827',
-  },
-
-  // Semantic
-  success: '#10B981',
-  warning: '#F59E0B',
-  error: '#EF4444',
-  info: '#3B82F6',
-
-  // Background
-  background: {
-    light: '#FFFFFF',
-    dark: '#0A0A0F',
-  },
-
-  // Glass effect colors
-  glass: {
-    light: 'rgba(255, 255, 255, 0.8)',
-    dark: 'rgba(255, 255, 255, 0.1)',
-    border: 'rgba(255, 255, 255, 0.2)',
-  },
-};
-
-export const DARK_COLORS = {
-  ...COLORS,
-  background: COLORS.background.dark,
-  text: COLORS.white,
-  textSecondary: COLORS.gray[400],
-};
-
-export const LIGHT_COLORS = {
-  ...COLORS,
-  background: COLORS.background.light,
-  text: COLORS.gray[900],
-  textSecondary: COLORS.gray[600],
-};
-`;
-  }
-
-  // Add GlassView component if missing
-  if (!result["src/components/ui/GlassView.tsx"]) {
-    result["src/components/ui/GlassView.tsx"] = `import React from 'react';
-import { View, StyleSheet, Platform, ViewStyle } from 'react-native';
-import { BlurView } from 'expo-blur';
-import { COLORS } from '../../constants/colors';
-import { BORDER_RADIUS, SHADOWS } from '../../constants/theme';
-
-interface GlassViewProps {
-  children: React.ReactNode;
-  style?: ViewStyle;
-  intensity?: number;
-  tint?: 'light' | 'dark' | 'default';
-}
-
-export function GlassView({
-  children,
-  style,
-  intensity = 80,
-  tint = 'light'
-}: GlassViewProps) {
-  if (Platform.OS === 'ios') {
-    return (
-      <BlurView
-        intensity={intensity}
-        tint={tint}
-        style={[styles.glass, style]}
-      >
-        {children}
-      </BlurView>
-    );
-  }
-
-  // Android fallback
-  return (
-    <View style={[styles.glass, styles.androidGlass, style]}>
-      {children}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  glass: {
-    borderRadius: BORDER_RADIUS.xl,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.glass.border,
-  },
-  androidGlass: {
-    backgroundColor: COLORS.glass.light,
-    ...SHADOWS.medium,
-  },
-});
-`;
   }
 
   return result;
@@ -856,7 +425,7 @@ const styles = StyleSheet.create({
  * Get default code files with an error/empty state message
  */
 function getDefaultCodeFiles(message: string): CodeFiles {
-  return ensureMinimumStructure({
+  return ensureConfigFiles({
     "App.tsx": `import React from 'react';
 import { SafeAreaView, StyleSheet, Text, View, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -927,128 +496,74 @@ const styles = StyleSheet.create({
 /**
  * Get platform-specific prompt additions
  */
-function getPlatformPrompt(platform?: Platform): string {
+function getPlatformPrompt(platform?: Platform, apiBaseUrl?: string): string {
+  const baseUrl = apiBaseUrl || "https://rux.sh";
+
   switch (platform) {
     case "IOS":
       return `
 
-## TARGET PLATFORM: iOS
-You are generating code specifically for iOS. Focus on:
-- Apple Liquid Glass design (iOS 18+) with glassmorphism, blur effects, subtle shadows
-- SF Pro font family (system default)
-- iOS-specific components and patterns
-- Haptic feedback for interactions
-- System colors that adapt to light/dark mode
-- Respect safe areas and notch
-- Use BlurView from expo-blur for glass effects
-- Large rounded corners (16-20px)
-- The app will primarily run on iPhone/iPad via Expo Go`;
+## TARGET PLATFORM: iOS (React Native + Expo)
+- Use @react-navigation/native-stack for navigation
+- Apple Liquid Glass design with expo-blur for glassmorphism
+- Haptic feedback with expo-haptics
+- SF Pro font (system default)
+- Safe areas and notch support
+- Large rounded corners (16-20px)`;
 
     case "ANDROID":
       return `
 
-## TARGET PLATFORM: Android
-You are generating code specifically for Android. Focus on:
-- Material Design 3 / Material You guidelines
-- Roboto font family (system default)
-- Android-specific patterns (FAB, Bottom sheets, etc.)
-- Ripple effects for touch feedback using android_ripple
-- Elevation and shadows for depth
-- Material color schemes
-- Support edge-to-edge display
-- Rounded corners (12-16px)
-- The app will primarily run on Android devices via Expo Go`;
+## TARGET PLATFORM: Android (React Native + Expo)
+- Use @react-navigation/native-stack for navigation
+- Material Design 3 / Material You
+- Ripple effects with android_ripple prop
+- Roboto font (system default)
+- Elevation shadows
+- Rounded corners (12-16px)`;
 
     case "WEB":
       return `
 
-## TARGET PLATFORM: Web Browser
-⚠️ CRITICAL: You are generating a WEB application, NOT a mobile app!
+## TARGET PLATFORM: Web Browser (Pure React - NOT React Native!)
 
-IGNORE ALL React Native instructions above. Generate PURE REACT code for web browsers.
+⚠️ CRITICAL WEB RULES:
+- DO NOT import from 'react-native' - use HTML elements instead
+- DO NOT use @react-navigation - use react-router-dom or simple state for navigation
+- DO NOT use StyleSheet.create - use inline styles or CSS
+- Use: <div>, <button>, <input>, <form>, <h1>, <p>, <span>, etc.
 
-## MANDATORY WEB-ONLY RULES:
-1. DO NOT use @react-navigation/native - it's for mobile only!
-2. DO NOT use react-native imports - they won't work on web!
-3. DO NOT use expo-blur, expo-haptics, or other Expo packages!
-4. DO NOT use StyleSheet.create() - use CSS or inline styles!
-5. DO NOT use SafeAreaView, View, Text from react-native!
-
-## USE THESE WEB TECHNOLOGIES INSTEAD:
-- Standard React with hooks (useState, useEffect, etc.)
-- HTML elements: <div>, <span>, <button>, <input>, <form>, <h1>-<h6>, <p>, <a>, <img>, <nav>, <header>, <footer>, <section>, <main>
-- CSS for styling (inline styles with style={{}} or CSS-in-JS)
-- react-router-dom for navigation (if needed, but prefer single-page for simplicity)
-
-## WEB CODE STRUCTURE:
-Return ONLY an "App.tsx" file with a complete React web component.
-
-## EXAMPLE WEB CODE PATTERN:
-\`\`\`tsx
-import React, { useState } from 'react';
-
-export default function App() {
-  const [count, setCount] = useState(0);
-
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-    }}>
-      <header style={{ padding: '20px', color: 'white' }}>
-        <h1>My Web App</h1>
-      </header>
-      <main style={{ padding: '20px' }}>
-        <button onClick={() => setCount(c => c + 1)}>
-          Count: {count}
-        </button>
-      </main>
-    </div>
-  );
-}
+## WEB API - Use absolute URL: ${baseUrl}
+\`\`\`typescript
+const API_BASE = '${baseUrl}';
+const API_KEY = 'USER_API_KEY';
+// All proxy endpoints same as mobile - see main system prompt
 \`\`\`
 
-## WEB STYLING BEST PRACTICES:
-- Use CSS Flexbox and Grid for layouts
-- Use CSS transitions and animations for interactivity
-- Use media queries for responsive design (or use viewport units like vh, vw)
-- Use modern CSS features: backdrop-filter for glass effects, box-shadow for depth
-- Use CSS variables for theming
-- Use gradients, shadows, and border-radius for modern look
-
-## GLASSMORPHISM FOR WEB:
-\`\`\`css
-{
-  background: rgba(255, 255, 255, 0.1),
-  backdropFilter: 'blur(10px)',
-  WebkitBackdropFilter: 'blur(10px)',
-  border: '1px solid rgba(255, 255, 255, 0.2)',
-  borderRadius: '16px',
-}
+## WEB STYLING:
+\`\`\`typescript
+// Use inline styles
+<div style={{
+  minHeight: '100vh',
+  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  fontFamily: 'system-ui, sans-serif',
+  padding: '20px'
+}}>
 \`\`\`
 
-## RESPONSE FORMAT FOR WEB:
-Return a JSON object with "App.tsx" containing complete web React code:
+## WEB OUTPUT FORMAT:
+Return JSON with these files:
 {
-  "App.tsx": "import React from 'react';\\n\\nexport default function App() {\\n  return (\\n    <div>...</div>\\n  );\\n}"
-}
-
-DO NOT include package.json, app.json, or any React Native files.
-Return ONLY valid JSON with web-compatible React code.`;
+  "App.tsx": "// Pure React code with HTML elements",
+  "src/services/api.ts": "// API calls using API_BASE"
+}`;
 
     default:
       return `
 
-## TARGET PLATFORM: Web
-You are generating code for web deployment. Focus on:
-- Responsive design that works on desktop and mobile browsers
-- Use standard React with HTML elements (div, span, button, etc.)
-- Web-friendly navigation patterns
-- Mouse and keyboard interactions
-- Hover states for interactive elements
-- CSS for styling (inline styles or CSS-in-JS)
-- The app will run in web browsers`;
+## TARGET PLATFORM: Web Browser
+Use pure React with HTML elements. No React Native imports.
+CSS inline styles. API_BASE = '${baseUrl}' for all proxy calls.`;
   }
 }
 
@@ -1058,11 +573,15 @@ You are generating code for web deployment. Focus on:
 export async function generateCode(
   options: GenerateOptions,
 ): Promise<AIResponse> {
-  const { prompt, existingCode, model, userClaudeKey, platform } = options;
+  const { prompt, existingCode, model, userClaudeKey, platform, apiBaseUrl } =
+    options;
+
+  // Default to production URL if not provided
+  const baseUrl = apiBaseUrl || "https://rux.sh";
 
   const isRefine = existingCode && Object.keys(existingCode).length > 0;
-  const basePrompt = isRefine ? REFINE_PROMPT : SYSTEM_PROMPT;
-  const platformPrompt = getPlatformPrompt(platform);
+  const basePrompt = isRefine ? REFINE_PROMPT : buildSystemPrompt(baseUrl);
+  const platformPrompt = getPlatformPrompt(platform, baseUrl);
   const systemPrompt = basePrompt + platformPrompt;
 
   if (model === "claude") {

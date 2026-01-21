@@ -161,6 +161,11 @@ export async function POST(request: NextRequest) {
             `Generating code with ${model === "claude" ? "Claude AI" : "Grok AI"}...`,
           );
 
+          // Get API base URL from request
+          const protocol = request.headers.get("x-forwarded-proto") || "https";
+          const host = request.headers.get("host") || "rux.sh";
+          const apiBaseUrl = `${protocol}://${host}`;
+
           // Generate code with platform context
           const result = await generateCode({
             prompt: data.prompt,
@@ -169,6 +174,7 @@ export async function POST(request: NextRequest) {
             model,
             userClaudeKey,
             platform: project.platform,
+            apiBaseUrl,
           });
 
           // Send progress for file processing
