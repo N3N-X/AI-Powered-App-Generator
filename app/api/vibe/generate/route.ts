@@ -67,12 +67,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = GenerateRequestSchema.parse(body);
 
-    // Get user from database
+    // Get user from database with project and API key
     const user = await prisma.user.findUnique({
       where: { clerkId: userId },
       include: {
         projects: {
           where: { id: data.projectId },
+          include: {
+            apiKeys: {
+              where: { active: true },
+              take: 1,
+            },
+          },
         },
       },
     });
@@ -133,6 +139,19 @@ export async function POST(request: NextRequest) {
     const host = request.headers.get("host") || "rux.sh";
     const apiBaseUrl = `${protocol}://${host}`;
 
+    // Decrypt the project's API key for injection into generated code
+    let decryptedApiKey: string | undefined;
+    const activeApiKey = project.apiKeys[0];
+    if (activeApiKey?.keyEncrypted) {
+      try {
+        const { decrypt } = await import("@/lib/encrypt");
+        decryptedApiKey = await decrypt(activeApiKey.keyEncrypted);
+      } catch (error) {
+        console.error("Failed to decrypt API key:", error);
+        // Continue without injecting key - user will need to add it manually
+      }
+    }
+
     // Create a readable stream for SSE with beautiful phases
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -152,14 +171,120 @@ export async function POST(request: NextRequest) {
         };
 
         try {
+          // Check if this is a REAL app (has screens) or just default template
+          // Default/blank projects only have App.tsx with minimal content
+          const hasScreenFiles = Object.keys(existingCode).some(
+            (f) => f.includes("/screens/") || f.includes("/components/"),
+          );
+          const appTsxContent =
+            existingCode["App.tsx"] || existingCode["App.js"] || "";
+          // If App.tsx is small (< 500 chars) and no screen files, it's a new/blank project
+          const isBlankProject = !hasScreenFiles && appTsxContent.length < 500;
+          const hasExistingAppCode =
+            !isBlankProject && Object.keys(existingCode).length > 0;
+
           const context = {
             userPrompt: data.prompt,
             platforms: [project.platform as Platform],
             apiBaseUrl,
-            existingCode:
-              Object.keys(existingCode).length > 0 ? existingCode : undefined,
+            apiKey: decryptedApiKey, // Inject actual API key
+            existingCode: hasExistingAppCode ? existingCode : undefined,
           };
 
+          // If actual app code exists, this is a REFINEMENT - skip planning/confirmation
+          // Just build the changes directly
+          if (hasExistingAppCode) {
+            sendUpdate({
+              phase: "building",
+              message: "Updating your app",
+              icon: "🔨",
+              progress: 30,
+              detail: "Applying changes...",
+            });
+
+            // For refinements, create a simple spec based on existing code
+            const refinementSpec: AppSpec = {
+              name: project.name,
+              description: data.prompt,
+              platforms: [project.platform as Platform],
+              features: [data.prompt], // The change requested
+              screens: [],
+              api: {
+                collections: [],
+                externalApis: [],
+                authRequired: false,
+                paymentsRequired: false,
+              },
+              styling: {
+                primaryColor: "#6366F1",
+                secondaryColor: "#EC4899",
+                style: "modern",
+              },
+            };
+
+            const buildResult = await orchestrateBuild(
+              refinementSpec,
+              context,
+              sendUpdate,
+            );
+
+            if (!buildResult.success) {
+              throw new Error("Build failed");
+            }
+
+            // Merge generated files with existing files
+            const updatedCodeFiles = {
+              ...existingCode,
+              ...buildResult.files,
+            };
+
+            // Update project in database
+            await prisma.project.update({
+              where: { id: project.id },
+              data: {
+                codeFiles: updatedCodeFiles,
+                updatedAt: new Date(),
+              },
+            });
+
+            // Save prompt history
+            await prisma.promptHistory.create({
+              data: {
+                prompt: data.prompt,
+                response: JSON.stringify(buildResult.files),
+                model: "grok",
+                tokens: 0,
+                userId: user.id,
+                projectId: project.id,
+              },
+            });
+
+            // Deduct credits
+            await prisma.user.update({
+              where: { id: user.id },
+              data: {
+                credits: { decrement: creditCost },
+                totalCreditsUsed: { increment: creditCost },
+              },
+            });
+
+            await incrementUsage(user.id);
+
+            // Send completion
+            const completeData = `data: ${JSON.stringify({
+              type: "complete",
+              success: true,
+              codeFiles: buildResult.files,
+              message: `Updated ${Object.keys(buildResult.files).length} file(s)`,
+            })}\n\n`;
+            controller.enqueue(encoder.encode(completeData));
+
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+            return;
+          }
+
+          // NEW APP: Go through planning and confirmation flow
           // Step 1: Plan the app
           const planResult = await orchestratePlan(context, sendUpdate);
 

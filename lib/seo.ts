@@ -3,7 +3,7 @@ import { Metadata } from "next";
 export const siteConfig = {
   name: "RUX",
   description:
-    "Build mobile and web apps with AI. Describe your idea in natural language and RUX generates production-ready React Native, Expo, and web code instantly.",
+    "Build mobile and web apps with AI. Describe your idea in natural language and RUX generates production-ready iOS, Android, and web code instantly.",
   url: "https://rux.sh",
   ogImage: "https://rux.sh/og-image.png",
   links: {
@@ -141,7 +141,9 @@ export function generateSoftwareApplicationSchema() {
   };
 }
 
-export function generateBreadcrumbSchema(items: { name: string; url: string }[]) {
+export function generateBreadcrumbSchema(
+  items: { name: string; url: string }[],
+) {
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",

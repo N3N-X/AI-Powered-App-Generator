@@ -18,6 +18,7 @@ import { ProxyService as PrismaProxyService } from "@prisma/client";
 /**
  * Generate a new API key for a project
  * Returns the raw key (only shown once) and the key info
+ * Also stores encrypted version for injection into generated code
  */
 export async function generateApiKey(
   projectId: string,
@@ -29,11 +30,16 @@ export async function generateApiKey(
   const keyPrefix = rawKey.substring(0, 12); // "rux_xxxxxxxx"
   const keyHash = hashApiKey(rawKey);
 
+  // Encrypt the raw key for later retrieval (for code injection)
+  const { encrypt } = await import("@/lib/encrypt");
+  const keyEncrypted = await encrypt(rawKey);
+
   const apiKey = await prisma.projectApiKey.create({
     data: {
       name,
       keyHash,
       keyPrefix,
+      keyEncrypted,
       services,
       projectId,
     },

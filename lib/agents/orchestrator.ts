@@ -21,6 +21,7 @@ import {
   buildCriticPrompt,
   buildFixerPrompt,
   buildApiServiceCode,
+  buildApiServiceCodeForSpec,
 } from "./prompts";
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -219,10 +220,17 @@ Return complete, working code as JSON.`;
     throw new Error("Failed to generate code");
   }
 
-  // Ensure api.ts exists with full proxy support
-  if (!allFiles["src/services/api.ts"]) {
-    allFiles["src/services/api.ts"] = buildApiServiceCode(context.apiBaseUrl);
-  }
+  // ALWAYS inject our api.ts - replace any AI-generated version
+  // This ensures correct API_BASE URL, API key, and only needed services
+  allFiles["src/services/api.ts"] = buildApiServiceCodeForSpec(
+    context.apiBaseUrl,
+    {
+      authRequired: spec.api.authRequired,
+      paymentsRequired: spec.api.paymentsRequired,
+      externalApis: spec.api.externalApis,
+    },
+    context.apiKey, // Inject actual API key if provided
+  );
 
   onStream({
     phase: "building",
@@ -449,31 +457,11 @@ export async function orchestrateBuild(
   context: GenerationContext,
   onStream: StreamCallback,
 ): Promise<{ files: Record<string, string>; success: boolean }> {
-  const MAX_FIX_LOOPS = 3;
-
   try {
-    // Generate code
+    // Generate code - AI should produce correct code from the start
     let files = await generateCode(spec, context, onStream);
 
-    // Validate and fix loop
-    for (let i = 0; i < MAX_FIX_LOOPS; i++) {
-      const validation = await validateCode(files, context, onStream);
-
-      if (validation.valid) {
-        break;
-      }
-
-      onStream({
-        phase: "fixing",
-        message: "Optimizing",
-        icon: "🔧",
-        progress: 85 + i * 3,
-        detail: `Fixing ${validation.errors.length} issues (attempt ${i + 1}/${MAX_FIX_LOOPS})...`,
-      });
-
-      files = await fixErrors(files, validation, onStream);
-    }
-
+    // Ensure required config files exist
     files = ensureConfigFiles(files);
 
     onStream({

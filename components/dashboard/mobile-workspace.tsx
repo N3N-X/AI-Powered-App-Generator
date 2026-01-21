@@ -103,6 +103,8 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
   const [previewMode, setPreviewMode] = useState<PreviewMode>("web");
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const webPreviewRef = useRef<{ current: Window | null }>({ current: null });
 
@@ -139,19 +141,18 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
       sdkVersion: SNACK_SDK_VERSION,
       files: convertToSnackFiles(currentProject.codeFiles),
       dependencies: {
-        expo: { version: "~52.0.0" },
-        "expo-blur": { version: "~14.0.1" },
-        "expo-haptics": { version: "~14.0.0" },
-        "expo-linear-gradient": { version: "~14.0.1" },
-        "expo-status-bar": { version: "~2.0.0" },
-        react: { version: "18.3.1" },
-        "react-native": { version: "0.76.5" },
-        "@react-navigation/native": { version: "^7.0.0" },
-        "@react-navigation/native-stack": { version: "^7.0.0" },
-        "react-native-safe-area-context": { version: "4.12.0" },
-        "react-native-screens": { version: "~4.4.0" },
+        "expo-status-bar": { version: "*" },
+        "expo-blur": { version: "*" },
+        "expo-haptics": { version: "*" },
+        "expo-linear-gradient": { version: "*" },
+        "react-native-safe-area-context": { version: "*" },
+        "@expo/vector-icons": { version: "*" },
+        "@react-navigation/native": { version: "*" },
+        "@react-navigation/native-stack": { version: "*" },
+        "react-native-screens": { version: "*" },
       },
       online: true,
+      codeChangesDelay: 500,
       webPreviewRef: webPreviewRef.current,
     });
 
@@ -159,12 +160,14 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
 
     const unsubscribe = snackInstance.addStateListener((state) => {
       setSnackState(state);
+      setIsPreviewLoading(false);
 
       // Generate QR code when online
       if (state.online && state.url) {
         QRCode.toDataURL(state.url, { width: 200, margin: 2 })
           .then(setQrCodeUrl)
           .catch(console.error);
+        setIsOnline(true);
       }
     });
 
@@ -929,6 +932,21 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
           {/* Toolbar */}
           <div className="h-14 px-4 flex items-center justify-between border-b border-white/5 bg-black/20 shrink-0">
             <div className="flex items-center gap-3">
+              {/* Status Indicator */}
+              <div className="flex items-center gap-2">
+                <div
+                  className={cn(
+                    "w-2 h-2 rounded-full transition-colors",
+                    isPreviewLoading
+                      ? "bg-yellow-500 animate-pulse"
+                      : isOnline
+                        ? "bg-emerald-500"
+                        : "bg-slate-500",
+                  )}
+                />
+                <span className="text-sm font-medium text-white">Preview</span>
+              </div>
+
               {/* Preview Mode Toggle */}
               <div className="flex items-center bg-white/5 rounded-lg p-1">
                 <Button
@@ -1227,22 +1245,29 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
                     </div>
                   </div>
                 ) : previewMode === "web" ? (
-                  // Web Preview (runs in browser)
+                  // Web Preview (runs in browser via Snack)
                   webPreviewUrl ? (
                     <iframe
                       ref={iframeRef}
                       src={webPreviewUrl}
-                      className="w-full h-full border-0"
+                      className="w-full h-full border-0 bg-white"
                       title="Web Preview"
                       allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
                       sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+                      onLoad={() => {
+                        if (iframeRef.current?.contentWindow) {
+                          webPreviewRef.current.current =
+                            iframeRef.current.contentWindow;
+                          setIsPreviewLoading(false);
+                        }
+                      }}
                     />
                   ) : (
                     <div className="h-full flex items-center justify-center bg-slate-900">
                       <div className="text-center text-slate-400">
-                        <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin" />
-                        <p>Loading web preview...</p>
-                        <p className="text-xs mt-2">This may take a moment</p>
+                        <Monitor className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="font-medium">Initializing preview...</p>
+                        <p className="text-xs mt-2">Connecting to Expo Snack</p>
                       </div>
                     </div>
                   )

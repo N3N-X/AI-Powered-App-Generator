@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     template: "%s | RUX",
   },
   description:
-    "Build mobile and web apps with AI. Describe your idea in natural language and RUX generates production-ready React Native, Expo, and web code instantly. Deploy in seconds.",
+    "Build mobile and web apps with AI. Describe your idea in natural language and RUX generates production-ready iOS, Android, and web code instantly. Deploy in seconds.",
   keywords: [
     "AI app builder",
     "mobile app generator",

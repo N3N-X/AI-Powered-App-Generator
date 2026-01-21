@@ -54,8 +54,260 @@ Operations:
 `;
 }
 
-// API service helper code that goes in every generated app
+// API service helper code - includes ALL services (used in prompts)
 export function buildApiServiceCode(apiBaseUrl: string): string {
+  return `const API_BASE = '${apiBaseUrl}';
+const API_KEY = 'USER_API_KEY';
+
+const headers = {
+  'Content-Type': 'application/json',
+  'X-RUX-API-Key': API_KEY,
+};
+
+// Database operations
+export const db = {
+  create: async (collection: string, data: any) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ collection, operation: 'create', data })
+    });
+    return res.json();
+  },
+  getAll: async (collection: string, filter?: any) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ collection, operation: 'findMany', filter })
+    });
+    const result = await res.json();
+    return result.data || [];
+  },
+  getOne: async (collection: string, filter: any) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ collection, operation: 'findOne', filter })
+    });
+    return res.json();
+  },
+  update: async (collection: string, id: string, data: any) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ collection, operation: 'update', filter: { id }, data })
+    });
+    return res.json();
+  },
+  delete: async (collection: string, id: string) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ collection, operation: 'delete', filter: { id } })
+    });
+    return res.json();
+  }
+};
+`;
+}
+
+// Build API code with ONLY the services the app needs
+export function buildApiServiceCodeForSpec(
+  apiBaseUrl: string,
+  spec: {
+    authRequired?: boolean;
+    paymentsRequired?: boolean;
+    externalApis?: string[];
+  },
+  apiKey?: string, // Optional actual API key to inject
+): string {
+  const services: string[] = [];
+
+  // Always include database
+  services.push(`// Database operations
+export const db = {
+  create: async (collection: string, data: any) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ collection, operation: 'create', data })
+    });
+    return res.json();
+  },
+  getAll: async (collection: string, filter?: any) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ collection, operation: 'findMany', filter })
+    });
+    const result = await res.json();
+    return result.data || [];
+  },
+  getOne: async (collection: string, filter: any) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ collection, operation: 'findOne', filter })
+    });
+    return res.json();
+  },
+  update: async (collection: string, id: string, data: any) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ collection, operation: 'update', filter: { id }, data })
+    });
+    return res.json();
+  },
+  delete: async (collection: string, id: string) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ collection, operation: 'delete', filter: { id } })
+    });
+    return res.json();
+  }
+};`);
+
+  // Auth if needed
+  if (spec.authRequired) {
+    services.push(`
+// Authentication
+export const auth = {
+  signup: async (email: string, password: string, metadata?: any) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/auth\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'signup', email, password, metadata })
+    });
+    return res.json();
+  },
+  login: async (email: string, password: string) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/auth\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'login', email, password })
+    });
+    return res.json();
+  },
+  logout: async () => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/auth\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'logout' })
+    });
+    return res.json();
+  },
+  getSession: async () => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/auth\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'getSession' })
+    });
+    return res.json();
+  }
+};`);
+  }
+
+  // Payments if needed
+  if (spec.paymentsRequired) {
+    services.push(`
+// Payments
+export const payments = {
+  createCheckout: async (items: { name: string; price: number; quantity: number }[], successUrl: string, cancelUrl: string) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/payments\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'createCheckout', items, successUrl, cancelUrl })
+    });
+    return res.json();
+  },
+  getProducts: async () => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/payments\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'getProducts' })
+    });
+    return res.json();
+  }
+};`);
+  }
+
+  // External APIs
+  const externalApis = spec.externalApis || [];
+
+  if (externalApis.includes("maps")) {
+    services.push(`
+// Maps
+export const maps = {
+  geocode: async (address: string) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/maps\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'geocode', address })
+    });
+    return res.json();
+  },
+  directions: async (origin: string, destination: string) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/maps\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'directions', origin, destination })
+    });
+    return res.json();
+  }
+};`);
+  }
+
+  if (externalApis.includes("email")) {
+    services.push(`
+// Email
+export const email = {
+  send: async (to: string, subject: string, html: string) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/email\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ to, subject, html })
+    });
+    return res.json();
+  }
+};`);
+  }
+
+  if (externalApis.includes("ai") || externalApis.includes("openai")) {
+    services.push(`
+// AI
+export const ai = {
+  chat: async (messages: { role: string; content: string }[]) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/openai\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'chat', messages })
+    });
+    return res.json();
+  }
+};`);
+  }
+
+  if (externalApis.includes("storage")) {
+    services.push(`
+// Storage
+export const storage = {
+  upload: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(\`\${API_BASE}/api/proxy/storage\`, {
+      method: 'POST',
+      headers: { 'X-RUX-API-Key': API_KEY },
+      body: formData
+    });
+    return res.json();
+  }
+};`);
+  }
+
+  // Use injected API key or environment variable fallback
+  const apiKeyValue = apiKey
+    ? `'${apiKey}'`
+    : `process.env.EXPO_PUBLIC_RUX_API_KEY || 'YOUR_API_KEY_HERE'`;
+
+  return `// RUX API Configuration
+// API_BASE: Your app's backend URL
+// API_KEY: Your project's API key (auto-configured)
+const API_BASE = '${apiBaseUrl}';
+const API_KEY = ${apiKeyValue};
+
+const headers = {
+  'Content-Type': 'application/json',
+  'X-RUX-API-Key': API_KEY,
+};
+
+${services.join("\n")}
+`;
+}
+
+// Old full API service code (keeping for backward compatibility)
+function buildFullApiServiceCode(apiBaseUrl: string): string {
   return `const API_BASE = '${apiBaseUrl}';
 const API_KEY = 'USER_API_KEY';
 
@@ -328,162 +580,205 @@ Analyze the user's app idea and output a structured JSON spec.
 
 ## RULES
 1. Keep it simple - minimum viable screens
-2. Only include auth if user mentions login/signup
-3. Only include payments if user mentions purchasing/subscriptions
-4. Start app on MAIN content screen, not login
-5. Use modern, vibrant colors
-6. Output ONLY valid JSON, no explanation`;
+2. Only include auth if user EXPLICITLY mentions login/signup/authentication
+3. Only include payments if user EXPLICITLY mentions purchasing/subscriptions/payment
+4. CRITICAL: First screen MUST be LandingScreen or main content - NEVER LoginScreen
+5. Screen order in array = navigation order. First screen = initial screen
+6. Use modern, vibrant colors
+7. Output ONLY valid JSON, no explanation
+
+## SCREEN ORDERING (IMPORTANT)
+- screens[0] = First screen user sees (Landing or Main content)
+- screens[1] = Second screen (could be main content or feature)
+- LoginScreen should NEVER be screens[0]
+- If auth needed: Landing -> optional Login -> Main Content`;
 }
 
 /**
  * iOS Worker Prompt
  */
 export function buildIOSWorkerPrompt(apiBaseUrl: string): string {
-  return `You are the RUX iOS Agent. Generate beautiful React Native + Expo code for iOS.
+  return `You are the RUX iOS Agent. Generate beautiful, ERROR-FREE React Native + Expo code for iOS.
 
-${buildProxyDocs(apiBaseUrl)}
-
-## iOS DESIGN SYSTEM
-- Apple Liquid Glass: glassmorphism with expo-blur
-- SF Pro font (system default)
-- Large titles, rounded corners (16-20px)
-- Haptic feedback with expo-haptics
-- Safe area support for notch/Dynamic Island
-- Subtle shadows, depth with blur
-
-## REQUIRED IMPORTS (exact syntax - do not modify)
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import * as Haptics from 'expo-haptics';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-## LinearGradient USAGE (must follow exactly)
-<LinearGradient
-  colors={['#667eea', '#764ba2']}
-  start={{ x: 0, y: 0 }}
-  end={{ x: 1, y: 1 }}
-  style={styles.gradient}
->
-  {/* children */}
-</LinearGradient>
-
-IMPORTANT: LinearGradient requires 'colors' prop as array of color strings.
-
-## NAVIGATION
-Use @react-navigation/native-stack (NOT @react-navigation/stack)
-
-## API SERVICE
-Always create src/services/api.ts with this exact code:
-\`\`\`typescript
-${buildApiServiceCode(apiBaseUrl)}
-\`\`\`
+CRITICAL: Your code MUST work without errors. Only use packages from the ALLOWED list.
 
 ## ALLOWED PACKAGES (ONLY USE THESE - nothing else!)
-- react, react-native (all core components)
+- react, react-native (View, Text, TouchableOpacity, ScrollView, FlatList, Modal, TextInput, Image, StyleSheet, etc.)
 - @react-navigation/native, @react-navigation/native-stack
 - react-native-safe-area-context, react-native-screens
 - expo-status-bar, expo-linear-gradient, expo-blur, expo-haptics
 
-## PROHIBITED PACKAGES (will cause runtime errors!)
-- react-native-date-picker (use custom date picker with TouchableOpacity)
-- react-native-calendars (build custom calendar UI)
-- react-native-picker (use custom dropdown with Modal + FlatList)
-- react-native-elements (use core react-native components)
-- react-native-paper (not available in Snack)
-- react-native-vector-icons (use emoji or custom icons)
-- axios (use fetch)
-- moment (use Date)
-- lodash (use native JS methods)
-- @react-navigation/stack (use native-stack)
-- Any package not in ALLOWED list above
+## ABSOLUTELY FORBIDDEN PACKAGES (WILL CRASH THE APP!)
+DO NOT import any of these - they don't exist in Expo Snack:
+- react-native-date-picker, react-native-calendars, react-native-picker
+- react-native-elements, react-native-paper, react-native-vector-icons
+- axios, moment, lodash, date-fns
+- @react-navigation/stack (use native-stack instead)
+- ANY other third-party package not in ALLOWED list
 
-## CUSTOM DATE PICKER PATTERN (use this instead of react-native-date-picker)
-Build date selection with TouchableOpacity + Modal showing a calendar grid.
+## REQUIRED IMPORTS (copy exactly)
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Modal, TextInput, Image, Platform } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 
-## OUTPUT FORMAT (JSON only):
+## CORRECT LinearGradient USAGE
+<LinearGradient
+  colors={['#667eea', '#764ba2']}
+  start={{ x: 0, y: 0 }}
+  end={{ x: 1, y: 1 }}
+  style={{ flex: 1 }}
+>
+  <Text>Content</Text>
+</LinearGradient>
+
+## FOR DATE/TIME SELECTION - BUILD CUSTOM UI
+Instead of date picker packages, create simple UI:
+- TouchableOpacity that opens a Modal
+- Inside Modal: month/year navigation + calendar grid
+- Use Date() for date manipulation
+
+## APP.TSX STRUCTURE (follow this pattern)
+const Stack = createNativeStackNavigator();
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Home" component={HomeScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+      <StatusBar style="light" />
+    </SafeAreaProvider>
+  );
+}
+
+## iOS DESIGN
+- Glassmorphism with BlurView
+- Large titles, rounded corners (16-20px)
+- Safe area support with useSafeAreaInsets
+- Haptic feedback: Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+
+## API SERVICES (import from src/services/api.ts)
+DO NOT generate src/services/api.ts - it will be provided automatically.
+Just import what you need:
+import { db } from '../services/api';  // Database operations
+import { auth } from '../services/api';  // If auth is needed
+import { payments } from '../services/api';  // If payments needed
+
+Available functions:
+- db.create(collection, data), db.getAll(collection), db.getOne(collection, filter), db.update(collection, id, data), db.delete(collection, id)
+- auth.signup(email, password), auth.login(email, password), auth.logout(), auth.getSession()
+- payments.createCheckout(items, successUrl, cancelUrl), payments.getProducts()
+
+## CRITICAL APP FLOW RULES
+1. NEVER start app on login screen
+2. First screen should be a LANDING PAGE or MAIN CONTENT
+3. If auth is needed: Landing -> Login (optional) -> Main Content
+4. User should see value BEFORE being asked to login
+
+## OUTPUT FORMAT (JSON only, no markdown):
 {
-  "App.tsx": "// code",
-  "src/services/api.ts": "// code",
-  "src/screens/HomeScreen.tsx": "// code"
-}`;
+  "App.tsx": "complete working code",
+  "src/screens/LandingScreen.tsx": "first screen user sees",
+  "src/screens/HomeScreen.tsx": "main content screen"
+}
+
+DO NOT include src/services/api.ts in your output - it's auto-generated.`;
 }
 
 /**
  * Android Worker Prompt
  */
 export function buildAndroidWorkerPrompt(apiBaseUrl: string): string {
-  return `You are the RUX Android Agent. Generate beautiful React Native + Expo code for Android.
+  return `You are the RUX Android Agent. Generate beautiful, ERROR-FREE React Native + Expo code for Android.
 
-${buildProxyDocs(apiBaseUrl)}
-
-## ANDROID DESIGN SYSTEM (Material Design 3)
-- Material You dynamic colors
-- Elevation shadows (not blur)
-- Ripple effects with android_ripple prop
-- Roboto font (system default)
-- Rounded corners (12-16px)
-- FAB for primary actions
-- Bottom navigation or drawer
-
-## PLATFORM-SPECIFIC STYLING
-const styles = StyleSheet.create({
-  card: {
-    ...Platform.select({
-      android: {
-        elevation: 4,
-        borderRadius: 12,
-      },
-    }),
-  },
-  button: {
-    ...Platform.select({
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-});
-
-// Ripple effect
-<Pressable android_ripple={{ color: 'rgba(0,0,0,0.1)' }}>
-
-## NAVIGATION
-Use @react-navigation/native-stack
-
-## API SERVICE
-Always create src/services/api.ts with this exact code:
-\`\`\`typescript
-${buildApiServiceCode(apiBaseUrl)}
-\`\`\`
+CRITICAL: Your code MUST work without errors. Only use packages from the ALLOWED list.
 
 ## ALLOWED PACKAGES (ONLY USE THESE - nothing else!)
-- react, react-native (all core components)
+- react, react-native (View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, Modal, TextInput, Image, StyleSheet, Platform, etc.)
 - @react-navigation/native, @react-navigation/native-stack
 - react-native-safe-area-context, react-native-screens
 - expo-status-bar, expo-linear-gradient
 
-## PROHIBITED PACKAGES (will cause runtime errors!)
-- react-native-date-picker (use custom date picker with TouchableOpacity)
-- react-native-calendars (build custom calendar UI)
-- react-native-picker (use custom dropdown with Modal + FlatList)
-- react-native-elements (use core react-native components)
-- react-native-paper (not available in Snack)
-- react-native-vector-icons (use emoji or custom icons)
-- expo-blur (Android performance issues)
-- axios (use fetch)
-- moment (use Date)
-- lodash (use native JS methods)
-- Any package not in ALLOWED list above
+## ABSOLUTELY FORBIDDEN PACKAGES (WILL CRASH THE APP!)
+DO NOT import any of these - they don't exist in Expo Snack:
+- react-native-date-picker, react-native-calendars, react-native-picker
+- react-native-elements, react-native-paper, react-native-vector-icons
+- expo-blur (causes Android performance issues)
+- axios, moment, lodash, date-fns
+- @react-navigation/stack (use native-stack instead)
+- ANY other third-party package not in ALLOWED list
 
-## CUSTOM DATE PICKER PATTERN
-Build date selection with TouchableOpacity + Modal showing a calendar grid.
+## REQUIRED IMPORTS (copy exactly)
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, Pressable, StyleSheet, ScrollView, FlatList, Modal, TextInput, Image, Platform } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 
-## OUTPUT FORMAT (JSON only):
+## ANDROID DESIGN (Material Design 3)
+- Use elevation for shadows: { elevation: 4 }
+- Ripple effects: <Pressable android_ripple={{ color: 'rgba(0,0,0,0.1)' }}>
+- Rounded corners (12-16px)
+- FAB for primary actions
+
+## APP.TSX STRUCTURE (follow this pattern)
+const Stack = createNativeStackNavigator();
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Home" component={HomeScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+      <StatusBar style="light" />
+    </SafeAreaProvider>
+  );
+}
+
+## FOR DATE/TIME SELECTION - BUILD CUSTOM UI
+Instead of date picker packages, create simple UI:
+- TouchableOpacity that opens a Modal
+- Inside Modal: month/year navigation + calendar grid
+- Use Date() for date manipulation
+
+## API SERVICES (import from src/services/api.ts)
+DO NOT generate src/services/api.ts - it will be provided automatically.
+Just import what you need:
+import { db } from '../services/api';  // Database operations
+import { auth } from '../services/api';  // If auth is needed
+import { payments } from '../services/api';  // If payments needed
+
+Available functions:
+- db.create(collection, data), db.getAll(collection), db.getOne(collection, filter), db.update(collection, id, data), db.delete(collection, id)
+- auth.signup(email, password), auth.login(email, password), auth.logout(), auth.getSession()
+- payments.createCheckout(items, successUrl, cancelUrl), payments.getProducts()
+
+## CRITICAL APP FLOW RULES
+1. NEVER start app on login screen
+2. First screen should be a LANDING PAGE or MAIN CONTENT
+3. If auth is needed: Landing -> Login (optional) -> Main Content
+4. User should see value BEFORE being asked to login
+
+## OUTPUT FORMAT (JSON only, no markdown):
 {
-  "App.tsx": "// code",
-  "src/services/api.ts": "// code",
-  "src/screens/HomeScreen.tsx": "// code"
-}`;
+  "App.tsx": "complete working code",
+  "src/screens/LandingScreen.tsx": "first screen user sees",
+  "src/screens/HomeScreen.tsx": "main content screen"
+}
+
+DO NOT include src/services/api.ts in your output - it's auto-generated.`;
 }
 
 /**
