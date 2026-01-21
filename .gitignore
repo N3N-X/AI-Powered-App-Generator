@@ -7,7 +7,7 @@ node_modules/
 # Build outputs
 .next/
 out/
-build/
+/build/
 dist/
 
 # Environment files
