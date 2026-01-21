@@ -1,22 +1,23 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Snack, SnackFiles } from "snack-sdk";
+import type { SnackState } from "snack-sdk";
 import Editor from "@monaco-editor/react";
 import { useProjectStore } from "@/stores/project-store";
 import { useRemainingCredits } from "@/stores/user-store";
-import { generatePreviewHtml } from "@/lib/preview-html";
 import { getLanguageForFile } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Input } from "@/components/ui/input";
 import {
   Send,
   Sparkles,
@@ -25,30 +26,48 @@ import {
   Loader2,
   Zap,
   Code2,
-  Eye,
-  RefreshCw,
-  ExternalLink,
   ChevronRight,
   X,
   File,
   Maximize2,
   Minimize2,
   FolderTree,
-  FileCode,
+  Smartphone,
   Plus,
+  Monitor,
+  QrCode,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { ChatMessage } from "@/types";
+import QRCode from "qrcode";
 
-interface WebWorkspaceProps {
+const SNACK_SDK_VERSION = "54.0.0";
+type PreviewMode = "web" | "device";
+
+// App Spec type for pending confirmation
+interface AppSpec {
+  name: string;
+  description: string;
+  features: string[];
+  screens: { name: string; description: string }[];
+  api: {
+    collections: { name: string }[];
+    authRequired: boolean;
+    paymentsRequired: boolean;
+  };
+  styling: {
+    primaryColor: string;
+    style: string;
+  };
+}
+
+interface MobileWorkspaceProps {
   className?: string;
 }
 
-export function WebWorkspace({ className }: WebWorkspaceProps) {
-  // DEBUG: Log when component renders
-  console.log("[WebWorkspace] Component rendering");
-
+export function MobileWorkspace({ className }: MobileWorkspaceProps) {
   const {
     currentProject,
     currentFile,
@@ -70,21 +89,7 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [openTabs, setOpenTabs] = useState<string[]>([]);
-  const [pendingSpec, setPendingSpec] = useState<{
-    name: string;
-    description: string;
-    features: string[];
-    screens: { name: string; description: string }[];
-    api: {
-      collections: { name: string }[];
-      authRequired: boolean;
-      paymentsRequired: boolean;
-    };
-    styling: {
-      primaryColor: string;
-      style: string;
-    };
-  } | null>(null);
+  const [pendingSpec, setPendingSpec] = useState<AppSpec | null>(null);
   const [currentPhase, setCurrentPhase] = useState<string | null>(null);
 
   // Spec editing state
@@ -92,14 +97,88 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
   const [newFeature, setNewFeature] = useState("");
   const [newScreenName, setNewScreenName] = useState("");
 
+  // Snack SDK state
+  const [snack, setSnack] = useState<InstanceType<typeof Snack> | null>(null);
+  const [snackState, setSnackState] = useState<SnackState | null>(null);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("web");
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const webPreviewRef = useRef<{ current: Window | null }>({ current: null });
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Generate preview HTML from current code
-  const previewHtml = useMemo(() => {
-    if (!currentProject?.codeFiles) return "";
-    return generatePreviewHtml(currentProject.codeFiles, currentProject.name);
-  }, [currentProject?.codeFiles, currentProject?.name]);
+  // Convert project code files to Snack files format
+  const convertToSnackFiles = useCallback(
+    (codeFiles: Record<string, string>): SnackFiles => {
+      const snackFiles: SnackFiles = {};
+      Object.entries(codeFiles).forEach(([path, content]) => {
+        snackFiles[path] = {
+          type: "CODE",
+          contents: content,
+        };
+      });
+      return snackFiles;
+    },
+    [],
+  );
+
+  // Initialize Snack SDK
+  useEffect(() => {
+    if (
+      !currentProject?.codeFiles ||
+      Object.keys(currentProject.codeFiles).length === 0
+    ) {
+      return;
+    }
+
+    const snackInstance = new Snack({
+      name: currentProject.name || "RUX App",
+      description: currentProject.description || "Built with RUX",
+      sdkVersion: SNACK_SDK_VERSION,
+      files: convertToSnackFiles(currentProject.codeFiles),
+      dependencies: {
+        expo: { version: "~52.0.0" },
+        "expo-blur": { version: "~14.0.1" },
+        "expo-haptics": { version: "~14.0.0" },
+        "expo-linear-gradient": { version: "~14.0.1" },
+        "expo-status-bar": { version: "~2.0.0" },
+        react: { version: "18.3.1" },
+        "react-native": { version: "0.76.5" },
+        "@react-navigation/native": { version: "^7.0.0" },
+        "@react-navigation/native-stack": { version: "^7.0.0" },
+        "react-native-safe-area-context": { version: "4.12.0" },
+        "react-native-screens": { version: "~4.4.0" },
+      },
+      online: true,
+      webPreviewRef: webPreviewRef.current,
+    });
+
+    setSnack(snackInstance);
+
+    const unsubscribe = snackInstance.addStateListener((state) => {
+      setSnackState(state);
+
+      // Generate QR code when online
+      if (state.online && state.url) {
+        QRCode.toDataURL(state.url, { width: 200, margin: 2 })
+          .then(setQrCodeUrl)
+          .catch(console.error);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [currentProject?.id, currentProject?.codeFiles, convertToSnackFiles]);
+
+  // Update snack files when code changes
+  useEffect(() => {
+    if (snack && currentProject?.codeFiles) {
+      snack.updateFiles(convertToSnackFiles(currentProject.codeFiles));
+    }
+  }, [snack, currentProject?.codeFiles, convertToSnackFiles]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -136,14 +215,14 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    console.log("[WebWorkspace] handleSubmit called", {
+    console.log("[MobileWorkspace] handleSubmit called", {
       input: input.trim(),
       projectId: currentProject?.id,
       isGenerating,
     });
 
     if (!input.trim() || !currentProject || isGenerating) {
-      console.log("[WebWorkspace] Early return - conditions not met");
+      console.log("[MobileWorkspace] Early return - conditions not met");
       return;
     }
 
@@ -155,7 +234,7 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
     setProgressMessage("Analyzing your request...");
 
     try {
-      console.log("[WebWorkspace] Making fetch request...");
+      console.log("[MobileWorkspace] Making fetch request...");
       const response = await fetch("/api/vibe/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -166,24 +245,26 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
       });
 
       console.log(
-        "[WebWorkspace] Response received:",
+        "[MobileWorkspace] Response received:",
         response.status,
         response.ok,
       );
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("[WebWorkspace] Response error:", errorText);
+        console.error("[MobileWorkspace] Response error:", errorText);
         throw new Error(`Failed to generate code: ${response.status}`);
       }
 
-      console.log("[WebWorkspace] Starting to read SSE stream...");
+      console.log("[MobileWorkspace] Starting to read SSE stream...");
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
 
       if (!reader) {
-        console.error("[WebWorkspace] No reader available from response body");
+        console.error(
+          "[MobileWorkspace] No reader available from response body",
+        );
         throw new Error("No response body");
       }
 
@@ -191,15 +272,13 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
 
       while (true) {
         const { done, value } = await reader.read();
-        console.log("[WebWorkspace] Stream read:", {
+        console.log("[MobileWorkspace] Stream read:", {
           done,
           hasValue: !!value,
-          valueLength: value?.length,
         });
 
         if (done) {
-          console.log("[WebWorkspace] Stream complete - resetting state");
-          // Stream ended - reset generating state if no pending spec
+          console.log("[MobileWorkspace] Stream complete - resetting state");
           setIsGenerating(false);
           setProgressMessage(null);
           break;
@@ -207,41 +286,44 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
 
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
-        console.log("[WebWorkspace] Chunk received:", chunk.substring(0, 100));
+        console.log(
+          "[MobileWorkspace] Chunk received:",
+          chunk.substring(0, 100),
+        );
 
-        // Process complete lines from buffer
         const lines = buffer.split("\n");
-        buffer = lines.pop() || ""; // Keep incomplete line in buffer
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             const jsonStr = line.slice(6);
-            console.log("[WebWorkspace] SSE data:", jsonStr.substring(0, 100));
+            console.log(
+              "[MobileWorkspace] SSE data:",
+              jsonStr.substring(0, 100),
+            );
 
             if (jsonStr === "[DONE]") {
-              console.log("[WebWorkspace] Received DONE signal");
+              console.log("[MobileWorkspace] Received DONE signal");
               continue;
             }
 
             try {
               const data = JSON.parse(jsonStr);
               console.log(
-                "[WebWorkspace] Parsed SSE event:",
+                "[MobileWorkspace] Parsed SSE event:",
                 data.type,
                 data.phase,
               );
 
-              // Handle phase updates (multi-agent format)
               if (data.type === "phase") {
                 setCurrentPhase(data.phase);
                 setProgressMessage(
                   `${data.icon} ${data.message}: ${data.detail || ""}`,
                 );
 
-                // Check if awaiting confirmation with appSpec
                 if (data.phase === "awaiting_confirmation" && data.appSpec) {
                   console.log(
-                    "[WebWorkspace] Received app spec for confirmation:",
+                    "[MobileWorkspace] Received app spec for confirmation:",
                     data.appSpec.name,
                   );
                   setPendingSpec(data.appSpec);
@@ -249,13 +331,15 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
                 }
               }
 
-              // Handle legacy progress updates
               if (data.type === "progress") {
                 setProgressMessage(data.message);
               }
 
               if (data.type === "error") {
-                console.error("[WebWorkspace] Error from server:", data.error);
+                console.error(
+                  "[MobileWorkspace] Error from server:",
+                  data.error,
+                );
                 addMessage({
                   role: "assistant",
                   content: `Sorry, there was an error: ${data.error}`,
@@ -269,7 +353,7 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
 
               if (data.type === "complete") {
                 console.log(
-                  "[WebWorkspace] Generation complete:",
+                  "[MobileWorkspace] Generation complete:",
                   Object.keys(data.codeFiles || {}).length,
                   "files",
                 );
@@ -296,18 +380,13 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
                 });
               }
             } catch (e) {
-              console.error(
-                "[WebWorkspace] Failed to parse SSE:",
-                e,
-                "Raw:",
-                jsonStr.substring(0, 200),
-              );
+              console.error("[MobileWorkspace] Failed to parse SSE:", e);
             }
           }
         }
       }
     } catch (error) {
-      console.error("[WebWorkspace] Generation error:", error);
+      console.error("[MobileWorkspace] Generation error:", error);
       addMessage({
         role: "assistant",
         content: `Sorry, something went wrong: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -318,19 +397,14 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
           error instanceof Error ? error.message : "Please try again",
         variant: "destructive",
       });
-      // Only reset on error
       setIsGenerating(false);
       setProgressMessage(null);
     }
-    // Note: Don't use finally - isGenerating is set to false in the stream handlers
-    // when awaiting_confirmation or complete is received
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    console.log("[WebWorkspace] Key pressed:", e.key);
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      console.log("[WebWorkspace] Enter pressed, calling handleSubmit");
       handleSubmit();
     }
   };
@@ -351,6 +425,14 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
       ...pendingSpec,
       features: pendingSpec.features.filter((_, i) => i !== index),
     });
+  };
+
+  const updateFeature = (index: number, value: string) => {
+    if (!pendingSpec) return;
+    const updated = [...pendingSpec.features];
+    updated[index] = value;
+    setPendingSpec({ ...pendingSpec, features: updated });
+    setEditingFeature(null);
   };
 
   const addScreen = () => {
@@ -396,12 +478,15 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
       const decoder = new TextDecoder();
 
       if (reader) {
+        let buffer = "";
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
           for (const line of lines) {
             if (line.startsWith("data: ")) {
@@ -467,7 +552,6 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
     }
   };
 
-  // Cancel spec and start over
   const handleCancelSpec = () => {
     setPendingSpec(null);
     setCurrentPhase(null);
@@ -504,47 +588,20 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
   };
 
   // Platform-specific quick prompts
-  const getQuickPrompts = () => {
-    const platform = currentProject?.platform;
-
-    if (platform === "WEB") {
-      return [
-        "Create a landing page with hero section",
-        "Add a responsive navigation bar",
-        "Build a contact form with validation",
-        "Add dark mode toggle",
-        "Create a pricing table",
-        "Add smooth scroll animations",
-      ];
-    } else if (platform === "IOS") {
-      return [
-        "Create a tab bar navigation",
-        "Add a settings screen with toggles",
-        "Build a list with pull to refresh",
-        "Add haptic feedback on buttons",
-        "Create a profile screen",
-        "Add iOS-style modal sheets",
-      ];
-    } else if (platform === "ANDROID") {
-      return [
-        "Create a bottom navigation bar",
-        "Add a floating action button",
-        "Build a card-based list view",
-        "Create a drawer navigation menu",
-        "Add Material Design buttons",
-        "Build a search bar with filters",
-      ];
-    }
-
-    return [
-      "Add a navigation bar",
-      "Make it dark mode",
-      "Add a contact form",
-      "Add animations",
-    ];
-  };
-
-  const quickPrompts = getQuickPrompts();
+  const quickPrompts =
+    currentProject?.platform === "IOS"
+      ? [
+          "Create a tab bar navigation",
+          "Add a settings screen with toggles",
+          "Build a list with pull to refresh",
+          "Add haptic feedback on buttons",
+        ]
+      : [
+          "Create a bottom navigation bar",
+          "Add a floating action button",
+          "Build a card-based list view",
+          "Create a drawer navigation menu",
+        ];
 
   if (!currentProject) {
     return (
@@ -561,6 +618,7 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
     ? currentProject.codeFiles?.[currentFile] || ""
     : "";
   const language = currentFile ? getLanguageForFile(currentFile) : "typescript";
+  const webPreviewUrl = snackState?.webPreviewURL;
 
   return (
     <TooltipProvider>
@@ -585,6 +643,9 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
                 </div>
               </div>
             </div>
+            <Badge variant="outline" className="text-xs">
+              {currentProject.platform}
+            </Badge>
           </div>
 
           {/* Messages */}
@@ -600,7 +661,7 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
                       What do you want to build?
                     </h3>
                     <p className="text-sm text-slate-400">
-                      Describe your app and watch it come to life
+                      Describe your {currentProject.platform} app
                     </p>
                   </div>
 
@@ -868,20 +929,80 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
           {/* Toolbar */}
           <div className="h-14 px-4 flex items-center justify-between border-b border-white/5 bg-black/20 shrink-0">
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="text-sm font-medium text-white">
-                  Live Preview
-                </span>
+              {/* Preview Mode Toggle */}
+              <div className="flex items-center bg-white/5 rounded-lg p-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-7 px-3 gap-1.5",
+                    previewMode === "web"
+                      ? "bg-violet-500/20 text-violet-300"
+                      : "text-slate-400 hover:text-white",
+                  )}
+                  onClick={() => setPreviewMode("web")}
+                >
+                  <Monitor className="h-3.5 w-3.5" />
+                  <span className="text-xs">Web</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-7 px-3 gap-1.5",
+                    previewMode === "device"
+                      ? "bg-violet-500/20 text-violet-300"
+                      : "text-slate-400 hover:text-white",
+                  )}
+                  onClick={() => setPreviewMode("device")}
+                >
+                  <Smartphone className="h-3.5 w-3.5" />
+                  <span className="text-xs">Device</span>
+                </Button>
               </div>
-              {currentProject.subdomain && (
-                <span className="text-xs text-slate-500">
-                  {currentProject.subdomain}.rux.sh
-                </span>
-              )}
+
+              <Badge variant="outline" className="text-xs">
+                {currentProject.platform}
+              </Badge>
             </div>
 
             <div className="flex items-center gap-2">
+              {/* QR Code Button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-2 text-slate-400 hover:text-white"
+                    onClick={() => setShowQrModal(true)}
+                    disabled={!qrCodeUrl}
+                  >
+                    <QrCode className="h-4 w-4" />
+                    <span className="hidden sm:inline">QR Code</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Scan to preview on device</TooltipContent>
+              </Tooltip>
+
+              {/* Open in Expo Snack */}
+              {snackState?.url && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-white"
+                      onClick={() => window.open(snackState.url, "_blank")}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open in Expo Snack</TooltipContent>
+                </Tooltip>
+              )}
+
+              <div className="w-px h-5 bg-white/10" />
+
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -949,33 +1070,12 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
                   {isPreviewFullscreen ? "Exit Fullscreen" : "Fullscreen"}
                 </TooltipContent>
               </Tooltip>
-
-              {currentProject.subdomain && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-slate-400 hover:text-white"
-                      onClick={() =>
-                        window.open(
-                          `/api/serve?subdomain=${currentProject.subdomain}`,
-                          "_blank",
-                        )
-                      }
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Open in New Tab</TooltipContent>
-                </Tooltip>
-              )}
             </div>
           </div>
 
           {/* Content Area */}
           <div className="flex-1 flex overflow-hidden">
-            {/* Code Editor (collapsible) - takes 50% when open, better balance */}
+            {/* Code Editor (collapsible) */}
             {showCodeEditor && (
               <div className="flex w-1/2 border-r border-white/5">
                 {/* File Explorer */}
@@ -1094,7 +1194,6 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
                 isPreviewFullscreen && "fixed inset-0 z-50 bg-[#0a0a0f] p-0",
               )}
             >
-              {/* Fullscreen exit button */}
               {isPreviewFullscreen && (
                 <Button
                   variant="outline"
@@ -1113,18 +1212,70 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
                   isPreviewFullscreen && "rounded-none border-0",
                 )}
               >
-                {previewHtml ? (
-                  <iframe
-                    srcDoc={previewHtml}
-                    className="w-full h-full border-0"
-                    title="Live Preview"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
-                  />
+                {previewMode === "web" ? (
+                  // Web Preview (runs in browser)
+                  webPreviewUrl ? (
+                    <iframe
+                      ref={iframeRef}
+                      src={webPreviewUrl}
+                      className="w-full h-full border-0"
+                      title="Web Preview"
+                      allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+                      sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+                    />
+                  ) : (
+                    <div className="h-full flex items-center justify-center bg-slate-900">
+                      <div className="text-center text-slate-400">
+                        <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin" />
+                        <p>Loading web preview...</p>
+                        <p className="text-xs mt-2">This may take a moment</p>
+                      </div>
+                    </div>
+                  )
                 ) : (
-                  <div className="h-full flex items-center justify-center bg-slate-100">
-                    <div className="text-center text-slate-500">
-                      <Eye className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>Start building to see your app here</p>
+                  // Device Preview (QR code for Expo Go)
+                  <div className="h-full flex items-center justify-center bg-slate-900">
+                    <div className="text-center">
+                      {qrCodeUrl ? (
+                        <>
+                          <div className="bg-white p-4 rounded-xl inline-block mb-4">
+                            <img
+                              src={qrCodeUrl}
+                              alt="QR Code"
+                              className="w-48 h-48"
+                            />
+                          </div>
+                          <h3 className="text-lg font-semibold text-white mb-2">
+                            Scan with Expo Go
+                          </h3>
+                          <p className="text-sm text-slate-400 max-w-xs mx-auto">
+                            Open the Expo Go app on your{" "}
+                            {currentProject.platform === "IOS"
+                              ? "iPhone"
+                              : "Android"}{" "}
+                            and scan this QR code to preview your app
+                          </p>
+                          {snackState?.url && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-4"
+                              onClick={() =>
+                                window.open(snackState.url, "_blank")
+                              }
+                            >
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Open in Expo Snack
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-slate-400">
+                          <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin" />
+                          <p>Generating QR code...</p>
+                          <p className="text-xs mt-2">Connecting to Expo...</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1132,6 +1283,33 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
             </div>
           </div>
         </div>
+
+        {/* QR Code Modal */}
+        {showQrModal && qrCodeUrl && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+            onClick={() => setShowQrModal(false)}
+          >
+            <div
+              className="bg-slate-900 rounded-2xl p-8 text-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-white p-6 rounded-xl inline-block mb-4">
+                <img src={qrCodeUrl} alt="QR Code" className="w-64 h-64" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                Scan with Expo Go
+              </h3>
+              <p className="text-sm text-slate-400 max-w-sm mx-auto mb-4">
+                Download Expo Go from the App Store or Play Store, then scan
+                this code to preview on your device
+              </p>
+              <Button variant="outline" onClick={() => setShowQrModal(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </TooltipProvider>
   );

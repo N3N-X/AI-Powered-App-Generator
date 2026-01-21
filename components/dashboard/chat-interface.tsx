@@ -5,12 +5,44 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { useProjectStore } from "@/stores/project-store";
 import { useUserStore, useRemainingCredits } from "@/stores/user-store";
 import { ChatMessage } from "@/types";
 import { Send, Sparkles, User, Bot, Loader2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+
+interface GenerationPhase {
+  phase:
+    | "planning"
+    | "awaiting_confirmation"
+    | "building"
+    | "validating"
+    | "fixing"
+    | "complete"
+    | "error";
+  message: string;
+  icon: string;
+  progress: number;
+  detail?: string;
+}
+
+interface AppSpec {
+  name: string;
+  description: string;
+  features: string[];
+  screens: { name: string; description: string }[];
+  api: {
+    collections: { name: string }[];
+    authRequired: boolean;
+    paymentsRequired: boolean;
+  };
+  styling: {
+    primaryColor: string;
+    style: string;
+  };
+}
 
 export function ChatInterface() {
   const [input, setInput] = useState("");
@@ -20,7 +52,10 @@ export function ChatInterface() {
   const [, setBuildId] = useState<string | null>(null);
   const [buildStatus, setBuildStatus] = useState<string | null>(null);
   const [buildUrl, setBuildUrl] = useState<string | null>(null);
-  const [progressMessage, setProgressMessage] = useState<string | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<GenerationPhase | null>(
+    null,
+  );
+  const [pendingSpec, setPendingSpec] = useState<AppSpec | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -69,7 +104,13 @@ export function ChatInterface() {
     });
 
     setIsGenerating(true);
-    setProgressMessage("Initializing AI generation...");
+    setCurrentPhase({
+      phase: "planning",
+      message: "Starting",
+      icon: "🚀",
+      progress: 0,
+      detail: "Initializing AI agents...",
+    });
 
     try {
       const response = await fetch("/api/vibe/generate", {
@@ -89,11 +130,16 @@ export function ChatInterface() {
       const decoder = new TextDecoder();
 
       if (reader) {
+        console.log("Starting SSE stream reader...");
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log("SSE stream ended");
+            break;
+          }
 
           const chunk = decoder.decode(value);
+          console.log("SSE chunk received:", chunk.length, "bytes");
           const lines = chunk.split("\n");
 
           for (const line of lines) {
@@ -104,13 +150,48 @@ export function ChatInterface() {
               try {
                 const data = JSON.parse(jsonStr);
 
-                // Handle progress updates
+                // Handle phase updates (new multi-agent format)
+                if (data.type === "phase") {
+                  console.log(
+                    "Phase update:",
+                    data.phase,
+                    data.appSpec ? "has appSpec" : "no appSpec",
+                  );
+
+                  setCurrentPhase({
+                    phase: data.phase,
+                    message: data.message,
+                    icon: data.icon,
+                    progress: data.progress || 0,
+                    detail: data.detail,
+                  });
+
+                  // Check if this phase includes an appSpec (awaiting confirmation)
+                  if (data.phase === "awaiting_confirmation" && data.appSpec) {
+                    console.log("Setting pending spec:", data.appSpec.name);
+                    setPendingSpec(data.appSpec);
+                    setIsGenerating(false);
+                  }
+                }
+
+                // Handle legacy progress updates
                 if (data.type === "progress") {
-                  setProgressMessage(data.message);
+                  setCurrentPhase((prev) => ({
+                    ...prev!,
+                    detail: data.message,
+                  }));
                 }
 
                 // Handle error
                 if (data.type === "error") {
+                  setCurrentPhase({
+                    phase: "error",
+                    message: "Generation failed",
+                    icon: "❌",
+                    progress: 0,
+                    detail: data.error,
+                  });
+
                   addMessage({
                     role: "assistant",
                     content: `Sorry, I encountered an error: ${data.error}. Please try again.`,
@@ -123,6 +204,19 @@ export function ChatInterface() {
                   });
                 }
 
+                // Handle awaiting confirmation
+                if (data.type === "awaiting_confirmation") {
+                  setPendingSpec(data.spec);
+                  setCurrentPhase({
+                    phase: "awaiting_confirmation",
+                    message: "Review your app",
+                    icon: "📋",
+                    progress: 20,
+                    detail: "Please confirm or edit the structure",
+                  });
+                  setIsGenerating(false);
+                }
+
                 // Handle final result
                 if (data.type === "complete") {
                   // Add assistant message using store
@@ -131,7 +225,7 @@ export function ChatInterface() {
                     content:
                       data.message ||
                       "I've updated your code based on your request.",
-                    model: data.model,
+                    model: "grok", // Multi-agent uses grok as primary
                     codeChanges: data.codeFiles,
                   });
 
@@ -156,6 +250,7 @@ export function ChatInterface() {
                   setBuildId(null);
                   setBuildStatus(null);
                   setBuildUrl(null);
+                  setPendingSpec(null);
                 }
               } catch (e) {
                 console.error("Failed to parse SSE data:", e);
@@ -182,8 +277,126 @@ export function ChatInterface() {
       });
     } finally {
       setIsGenerating(false);
-      setProgressMessage(null);
+      setCurrentPhase(null);
     }
+  };
+
+  // Confirm spec and build
+  const handleConfirmSpec = async () => {
+    if (!pendingSpec || !currentProject) return;
+
+    setIsGenerating(true);
+    setCurrentPhase({
+      phase: "building",
+      message: "Building your app",
+      icon: "🔨",
+      progress: 30,
+      detail: "Starting code generation...",
+    });
+
+    try {
+      const response = await fetch("/api/vibe/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: currentProject.id,
+          spec: pendingSpec,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Build request failed");
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const jsonStr = line.slice(6);
+              if (jsonStr === "[DONE]") continue;
+
+              try {
+                const data = JSON.parse(jsonStr);
+
+                if (data.type === "phase") {
+                  setCurrentPhase({
+                    phase: data.phase,
+                    message: data.message,
+                    icon: data.icon,
+                    progress: data.progress || 0,
+                    detail: data.detail,
+                  });
+                }
+
+                if (data.type === "error") {
+                  toast({
+                    title: "Build failed",
+                    description: data.error,
+                    variant: "destructive",
+                  });
+                }
+
+                if (data.type === "complete") {
+                  addMessage({
+                    role: "assistant",
+                    content: data.message || "Your app is ready!",
+                    model: "grok",
+                    codeChanges: data.codeFiles,
+                  });
+
+                  if (data.codeFiles) {
+                    setCodeFiles({
+                      ...currentProject.codeFiles,
+                      ...data.codeFiles,
+                    });
+                  }
+
+                  deductCredits(100);
+                  setPendingSpec(null);
+
+                  toast({
+                    title: "App built successfully",
+                    description: `Generated ${Object.keys(data.codeFiles || {}).length} files`,
+                  });
+                }
+              } catch (e) {
+                console.error("Failed to parse SSE data:", e);
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Build error:", error);
+      toast({
+        title: "Build failed",
+        description:
+          error instanceof Error ? error.message : "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+      setCurrentPhase(null);
+    }
+  };
+
+  // Cancel spec and start over
+  const handleCancelSpec = () => {
+    setPendingSpec(null);
+    setCurrentPhase(null);
+    toast({
+      title: "Cancelled",
+      description: "You can describe your app again",
+    });
   };
 
   // Build web preview
@@ -346,15 +559,175 @@ export function ChatInterface() {
             ))
           )}
 
-          {isGenerating && (
+          {isGenerating && currentPhase && (
             <div className="flex items-start gap-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600">
                 <Bot className="h-4 w-4 text-white" />
               </div>
-              <div className="glass rounded-2xl rounded-tl-none px-4 py-3">
+              <div className="glass rounded-2xl rounded-tl-none px-4 py-4 min-w-[280px]">
+                {/* Phase Header */}
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">{currentPhase.icon}</span>
+                  <span className="font-medium text-white">
+                    {currentPhase.message}
+                  </span>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="mb-2">
+                  <Progress value={currentPhase.progress} className="h-2" />
+                </div>
+
+                {/* Detail */}
                 <div className="flex items-center gap-2 text-sm text-slate-400">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {progressMessage || "Generating code..."}
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>{currentPhase.detail || "Processing..."}</span>
+                </div>
+
+                {/* Phase indicators */}
+                <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-white/10">
+                  <PhaseIndicator
+                    active={currentPhase.phase === "planning"}
+                    complete={[
+                      "building",
+                      "validating",
+                      "fixing",
+                      "complete",
+                    ].includes(currentPhase.phase)}
+                    label="Plan"
+                  />
+                  <div className="h-0.5 w-4 bg-white/10" />
+                  <PhaseIndicator
+                    active={currentPhase.phase === "building"}
+                    complete={["validating", "fixing", "complete"].includes(
+                      currentPhase.phase,
+                    )}
+                    label="Build"
+                  />
+                  <div className="h-0.5 w-4 bg-white/10" />
+                  <PhaseIndicator
+                    active={
+                      currentPhase.phase === "validating" ||
+                      currentPhase.phase === "fixing"
+                    }
+                    complete={currentPhase.phase === "complete"}
+                    label="Polish"
+                  />
+                  <div className="h-0.5 w-4 bg-white/10" />
+                  <PhaseIndicator
+                    active={currentPhase.phase === "complete"}
+                    complete={false}
+                    label="Done"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Pending Spec Confirmation */}
+          {pendingSpec && !isGenerating && (
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600">
+                <Bot className="h-4 w-4 text-white" />
+              </div>
+              <div className="glass rounded-2xl rounded-tl-none px-4 py-4 max-w-[400px]">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">📋</span>
+                  <span className="font-medium text-white">
+                    Review Your App
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-sm">
+                  {/* App Name & Description */}
+                  <div>
+                    <p className="text-white font-medium">{pendingSpec.name}</p>
+                    <p className="text-slate-400 text-xs">
+                      {pendingSpec.description}
+                    </p>
+                  </div>
+
+                  {/* Features */}
+                  <div>
+                    <p className="text-slate-300 text-xs font-medium mb-1">
+                      Features
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {pendingSpec.features.slice(0, 5).map((feature, i) => (
+                        <Badge key={i} variant="outline" className="text-xs">
+                          {feature}
+                        </Badge>
+                      ))}
+                      {pendingSpec.features.length > 5 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{pendingSpec.features.length - 5} more
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Screens */}
+                  <div>
+                    <p className="text-slate-300 text-xs font-medium mb-1">
+                      Screens
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {pendingSpec.screens.map((screen, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs">
+                          {screen.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* API Info */}
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    {pendingSpec.api.authRequired && (
+                      <span className="flex items-center gap-1">🔐 Auth</span>
+                    )}
+                    {pendingSpec.api.paymentsRequired && (
+                      <span className="flex items-center gap-1">
+                        💳 Payments
+                      </span>
+                    )}
+                    {pendingSpec.api.collections.length > 0 && (
+                      <span className="flex items-center gap-1">
+                        📦 {pendingSpec.api.collections.length} collections
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Style Preview */}
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 rounded-full border border-white/20"
+                      style={{
+                        backgroundColor: pendingSpec.styling.primaryColor,
+                      }}
+                    />
+                    <span className="text-xs text-slate-400 capitalize">
+                      {pendingSpec.styling.style} style
+                    </span>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2 mt-4 pt-3 border-t border-white/10">
+                  <Button
+                    size="sm"
+                    variant="gradient"
+                    onClick={handleConfirmSpec}
+                    className="flex-1"
+                  >
+                    ✓ Build This
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCancelSpec}
+                  >
+                    ✕ Cancel
+                  </Button>
                 </div>
               </div>
             </div>
@@ -501,6 +874,43 @@ function MessageBubble({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function PhaseIndicator({
+  active,
+  complete,
+  label,
+}: {
+  active: boolean;
+  complete: boolean;
+  label: string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div
+        className={cn(
+          "h-2 w-2 rounded-full transition-all duration-300",
+          complete
+            ? "bg-green-500"
+            : active
+              ? "bg-violet-500 animate-pulse"
+              : "bg-white/20",
+        )}
+      />
+      <span
+        className={cn(
+          "text-[10px] transition-colors",
+          complete
+            ? "text-green-400"
+            : active
+              ? "text-violet-400"
+              : "text-slate-500",
+        )}
+      >
+        {label}
+      </span>
     </div>
   );
 }

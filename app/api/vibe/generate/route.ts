@@ -2,10 +2,17 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/db";
-import { generateCode, getModelForPlan, canUseModel } from "@/lib/ai";
 import { checkPlanRateLimit, incrementUsage } from "@/lib/rate-limit";
-import { decrypt } from "@/lib/encrypt";
-import { GenerateRequestSchema, Plan, CodeFiles, CREDIT_COSTS } from "@/types";
+import { Plan, CodeFiles, CREDIT_COSTS } from "@/types";
+import { orchestratePlan, orchestrateBuild } from "@/lib/agents/orchestrator";
+import { StreamUpdate, Platform, AppSpec } from "@/lib/agents/types";
+
+// Extended schema to support quickMode
+const GenerateRequestSchema = z.object({
+  projectId: z.string(),
+  prompt: z.string().min(1),
+  quickMode: z.boolean().optional().default(false), // Skip confirmation step
+});
 
 /**
  * @swagger
@@ -118,90 +125,81 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine AI model
-    const hasCustomClaudeKey = !!user.claudeKeyEncrypted;
-    let model =
-      data.model || getModelForPlan(user.plan as Plan, hasCustomClaudeKey);
-
-    // Validate model access
-    if (!canUseModel(user.plan as Plan, model, hasCustomClaudeKey)) {
-      model = getModelForPlan(user.plan as Plan, hasCustomClaudeKey);
-    }
-
-    // Get custom Claude key if Elite user has one
-    let userClaudeKey: string | undefined;
-    if (model === "claude" && user.claudeKeyEncrypted) {
-      try {
-        userClaudeKey = await decrypt(user.claudeKeyEncrypted);
-      } catch (error) {
-        console.error("Failed to decrypt Claude key:", error);
-      }
-    }
-
     // Get existing code files
     const existingCode = project.codeFiles as CodeFiles;
 
-    // Create a readable stream for SSE
+    // Get API base URL from request
+    const protocol = request.headers.get("x-forwarded-proto") || "https";
+    const host = request.headers.get("host") || "rux.sh";
+    const apiBaseUrl = `${protocol}://${host}`;
+
+    // Create a readable stream for SSE with beautiful phases
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        const sendProgress = (message: string) => {
-          const data = `data: ${JSON.stringify({ type: "progress", message })}\n\n`;
-          controller.enqueue(encoder.encode(data));
+        // Send stream update with phase info
+        const sendUpdate = (update: StreamUpdate) => {
+          const eventData = `data: ${JSON.stringify({
+            type: "phase",
+            phase: update.phase,
+            message: update.message,
+            icon: update.icon,
+            progress: update.progress,
+            detail: update.detail,
+            appSpec: update.appSpec, // Include spec for confirmation
+          })}\n\n`;
+          controller.enqueue(encoder.encode(eventData));
         };
 
         try {
-          // Send initial progress
-          sendProgress("Analyzing your request...");
-
-          // Simulate analyzing phase
-          await new Promise((resolve) => setTimeout(resolve, 500));
-
-          sendProgress(
-            `Generating code with ${model === "claude" ? "Claude AI" : "Grok AI"}...`,
-          );
-
-          // Get API base URL from request
-          const protocol = request.headers.get("x-forwarded-proto") || "https";
-          const host = request.headers.get("host") || "rux.sh";
-          const apiBaseUrl = `${protocol}://${host}`;
-
-          // Generate code with platform context
-          const result = await generateCode({
-            prompt: data.prompt,
+          const context = {
+            userPrompt: data.prompt,
+            platforms: [project.platform as Platform],
+            apiBaseUrl,
             existingCode:
               Object.keys(existingCode).length > 0 ? existingCode : undefined,
-            model,
-            userClaudeKey,
-            platform: project.platform,
-            apiBaseUrl,
-          });
+          };
 
-          // Send progress for file processing
-          const fileCount = Object.keys(result.codeFiles).length;
-          sendProgress(`Processing ${fileCount} file(s)...`);
+          // Step 1: Plan the app
+          const planResult = await orchestratePlan(context, sendUpdate);
 
-          // Simulate processing files
-          const fileNames = Object.keys(result.codeFiles);
-          for (let i = 0; i < Math.min(fileNames.length, 5); i++) {
-            await new Promise((resolve) => setTimeout(resolve, 200));
-            const fileName = fileNames[i];
-            const shortName =
-              fileName.length > 30 ? "..." + fileName.slice(-27) : fileName;
-            sendProgress(`Creating ${shortName}...`);
+          if (!planResult.success || !planResult.spec) {
+            throw new Error("Planning failed");
           }
 
-          if (fileNames.length > 5) {
-            sendProgress(`Creating ${fileNames.length - 5} more files...`);
+          // If quickMode is false, stop here and wait for confirmation
+          // The orchestratePlan already sent the awaiting_confirmation phase with appSpec
+          // Frontend will call /api/vibe/build with the confirmed spec
+          if (!data.quickMode) {
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+            return;
+          }
+
+          // Quick mode: continue building without confirmation
+          sendUpdate({
+            phase: "building",
+            message: "Building your app",
+            icon: "🔨",
+            progress: 30,
+            detail: "Starting code generation...",
+          });
+
+          const buildResult = await orchestrateBuild(
+            planResult.spec,
+            context,
+            sendUpdate,
+          );
+
+          if (!buildResult.success) {
+            throw new Error("Build failed");
           }
 
           // Merge generated files with existing files
           const updatedCodeFiles = {
             ...existingCode,
-            ...result.codeFiles,
+            ...buildResult.files,
           };
-
-          sendProgress("Saving project files...");
 
           // Update project in database
           await prisma.project.update({
@@ -212,15 +210,13 @@ export async function POST(request: NextRequest) {
             },
           });
 
-          sendProgress("Updating project history...");
-
           // Save prompt history
           await prisma.promptHistory.create({
             data: {
               prompt: data.prompt,
-              response: JSON.stringify(result.codeFiles),
-              model: result.model,
-              tokens: result.tokensUsed,
+              response: JSON.stringify(buildResult.files),
+              model: "grok",
+              tokens: 0,
               userId: user.id,
               projectId: project.id,
             },
@@ -238,16 +234,12 @@ export async function POST(request: NextRequest) {
           // Increment rate limit counter
           await incrementUsage(user.id);
 
-          sendProgress("Finalizing...");
-
           // Send completion
           const completeData = `data: ${JSON.stringify({
             type: "complete",
             success: true,
-            codeFiles: result.codeFiles,
-            model: result.model,
-            tokensUsed: result.tokensUsed,
-            message: `Generated ${Object.keys(result.codeFiles).length} file(s)`,
+            codeFiles: buildResult.files,
+            message: `Generated ${Object.keys(buildResult.files).length} file(s)`,
           })}\n\n`;
           controller.enqueue(encoder.encode(completeData));
 
@@ -259,6 +251,8 @@ export async function POST(request: NextRequest) {
 
           const errorData = `data: ${JSON.stringify({
             type: "error",
+            phase: "error",
+            icon: "❌",
             error: error instanceof Error ? error.message : "Generation failed",
           })}\n\n`;
           controller.enqueue(encoder.encode(errorData));

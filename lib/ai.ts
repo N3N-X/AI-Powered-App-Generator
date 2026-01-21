@@ -332,14 +332,62 @@ function parseCodeResponse(content: string): CodeFiles {
   }
 }
 
+// Required dependencies that must always be present
+const REQUIRED_DEPENDENCIES = {
+  expo: "~52.0.0",
+  "expo-blur": "~14.0.1",
+  "expo-haptics": "~14.0.0",
+  "expo-linear-gradient": "~14.0.1",
+  "expo-status-bar": "~2.0.0",
+  react: "18.3.1",
+  "react-native": "0.76.5",
+  "@react-navigation/native": "^7.0.0",
+  "@react-navigation/native-stack": "^7.0.0",
+  "react-native-safe-area-context": "4.12.0",
+  "react-native-screens": "~4.4.0",
+};
+
 /**
- * Only add essential config files if missing - never override AI-generated code
+ * Ensure essential config files exist and have required dependencies
  */
 function ensureConfigFiles(codeFiles: CodeFiles): CodeFiles {
   const result = { ...codeFiles };
 
-  // Only add package.json if missing
-  if (!result["package.json"]) {
+  // Create or merge package.json
+  if (result["package.json"]) {
+    // Merge required dependencies into existing package.json
+    try {
+      const existing = JSON.parse(result["package.json"]);
+      existing.dependencies = {
+        ...REQUIRED_DEPENDENCIES,
+        ...(existing.dependencies || {}),
+      };
+      result["package.json"] = JSON.stringify(existing, null, 2);
+    } catch {
+      // If parsing fails, replace with default
+      result["package.json"] = JSON.stringify(
+        {
+          name: "rux-app",
+          version: "1.0.0",
+          main: "node_modules/expo/AppEntry.js",
+          scripts: {
+            start: "expo start",
+            android: "expo start --android",
+            ios: "expo start --ios",
+            web: "expo start --web",
+          },
+          dependencies: REQUIRED_DEPENDENCIES,
+          devDependencies: {
+            "@babel/core": "^7.25.2",
+            "@types/react": "~18.3.12",
+            typescript: "^5.7.2",
+          },
+        },
+        null,
+        2,
+      );
+    }
+  } else {
     result["package.json"] = JSON.stringify(
       {
         name: "rux-app",
@@ -351,19 +399,7 @@ function ensureConfigFiles(codeFiles: CodeFiles): CodeFiles {
           ios: "expo start --ios",
           web: "expo start --web",
         },
-        dependencies: {
-          expo: "~52.0.0",
-          "expo-blur": "~14.0.1",
-          "expo-haptics": "~14.0.0",
-          "expo-linear-gradient": "~14.0.1",
-          "expo-status-bar": "~2.0.0",
-          react: "18.3.1",
-          "react-native": "0.76.5",
-          "@react-navigation/native": "^7.0.0",
-          "@react-navigation/native-stack": "^7.0.0",
-          "react-native-safe-area-context": "4.12.0",
-          "react-native-screens": "~4.4.0",
-        },
+        dependencies: REQUIRED_DEPENDENCIES,
         devDependencies: {
           "@babel/core": "^7.25.2",
           "@types/react": "~18.3.12",

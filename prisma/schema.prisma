@@ -265,6 +265,9 @@ enum ProxyService {
   PHONE_VALIDATE  // Phone validation
   DOMAIN_WHOIS    // Domain lookup
 
+  // Payments
+  PAYMENTS        // Stripe payments, subscriptions, in-app purchases
+
   // Content APIs
   NEWS          // News API
   STOCKS        // Stock market data
