@@ -183,6 +183,16 @@ export async function POST(request: NextRequest) {
           const hasExistingAppCode =
             !isBlankProject && Object.keys(existingCode).length > 0;
 
+          // Debug logging
+          console.log("[Generate] Project detection:", {
+            fileCount: Object.keys(existingCode).length,
+            hasScreenFiles,
+            appTsxLength: appTsxContent.length,
+            isBlankProject,
+            hasExistingAppCode,
+            files: Object.keys(existingCode),
+          });
+
           const context = {
             userPrompt: data.prompt,
             platforms: [project.platform as Platform],
