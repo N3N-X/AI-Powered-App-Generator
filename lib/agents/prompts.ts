@@ -643,7 +643,22 @@ Instead of date picker packages, create simple UI:
 - Inside Modal: month/year navigation + calendar grid
 - Use Date() for date manipulation
 
-## APP.TSX STRUCTURE (follow this pattern)
+## APP.TSX STRUCTURE (CRITICAL - follow exactly)
+IMPORTANT: You MUST import ALL screen components at the top of App.tsx before using them!
+
+// App.tsx example:
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+
+// CRITICAL: Import ALL screens you use in Stack.Screen
+import HomeScreen from './src/screens/HomeScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+// ... import every screen!
+
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -652,12 +667,16 @@ export default function App() {
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
         </Stack.Navigator>
       </NavigationContainer>
       <StatusBar style="light" />
     </SafeAreaProvider>
   );
 }
+
+RULE: Every component used in Stack.Screen MUST be imported from its file!
 
 ## iOS DESIGN
 - Glassmorphism with BlurView
@@ -731,7 +750,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 - Rounded corners (12-16px)
 - FAB for primary actions
 
-## APP.TSX STRUCTURE (follow this pattern)
+## APP.TSX STRUCTURE (CRITICAL - follow exactly)
+IMPORTANT: You MUST import ALL screen components at the top of App.tsx before using them!
+
+// App.tsx example:
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+
+// CRITICAL: Import ALL screens you use in Stack.Screen
+import HomeScreen from './src/screens/HomeScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+// ... import every screen!
+
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -740,12 +774,16 @@ export default function App() {
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
         </Stack.Navigator>
       </NavigationContainer>
       <StatusBar style="light" />
     </SafeAreaProvider>
   );
 }
+
+RULE: Every component used in Stack.Screen MUST be imported from its file!
 
 ## FOR DATE/TIME SELECTION - BUILD CUSTOM UI
 Instead of date picker packages, create simple UI:
