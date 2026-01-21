@@ -11,9 +11,9 @@ import { generateApiKey } from "@/lib/proxy";
 import { ProxyService } from "@prisma/client";
 
 // Default services for auto-generated API keys
+// Note: Only using enum values that exist in all environments
 const DEFAULT_PROJECT_SERVICES: ProxyService[] = [
   ProxyService.DATABASE,
-  ProxyService.APP_AUTH,
   ProxyService.EMAIL,
   ProxyService.SMS,
   ProxyService.MAPS,
