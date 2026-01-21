@@ -55,13 +55,16 @@ export const db = {
 };
 \`\`\`
 
-DESIGN: Modern, clean UI with gradients, shadows, rounded corners. Use vibrant colors.
+DESIGN: Modern, clean UI with shadows, rounded corners. Use vibrant colors.
+For gradients use: <View style={{backgroundColor: '#6366f1'}}> or multiple layered views - NOT LinearGradient.
 
-ALLOWED PACKAGES ONLY:
-- expo, react, react-native
-- @react-navigation/native @react-navigation/native-stack
-- react-native-screens react-native-safe-area-context
-- expo-status-bar expo-blur expo-haptics
+ALLOWED PACKAGES (DO NOT import anything else - app will crash):
+- react, react-native (View, Text, TouchableOpacity, ScrollView, FlatList, TextInput, StyleSheet, etc.)
+- @react-navigation/native, @react-navigation/native-stack
+- react-native-screens, react-native-safe-area-context
+- expo-status-bar
+
+DO NOT USE: expo-linear-gradient, axios, or any package not listed above.
 
 OUTPUT: Valid JSON only. No markdown. No explanation.
 {"App.tsx": "code", "src/services/api.ts": "code", "src/screens/HomeScreen.tsx": "code"}`;
