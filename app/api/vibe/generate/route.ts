@@ -134,10 +134,9 @@ export async function POST(request: NextRequest) {
     // Get existing code files
     const existingCode = project.codeFiles as CodeFiles;
 
-    // Get API base URL from request
-    const protocol = request.headers.get("x-forwarded-proto") || "https";
-    const host = request.headers.get("host") || "rux.sh";
-    const apiBaseUrl = `${protocol}://${host}`;
+    // Get API base URL - always use production URL for generated apps
+    // Expo Snack runs in a sandbox and can't access localhost
+    const apiBaseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://rux.sh";
 
     // Decrypt the project's API key for injection into generated code
     let decryptedApiKey: string | undefined;
