@@ -178,10 +178,16 @@ export async function POST(request: NextRequest) {
           );
           const appTsxContent =
             existingCode["App.tsx"] || existingCode["App.js"] || "";
-          // If App.tsx is small (< 500 chars) and no screen files, it's a new/blank project
-          const isBlankProject = !hasScreenFiles && appTsxContent.length < 500;
-          const hasExistingAppCode =
-            !isBlankProject && Object.keys(existingCode).length > 0;
+
+          // A blank project is one that:
+          // - Has no screen files (no /screens/ or /components/)
+          // - Only has App.tsx (or very few files like package.json, etc.)
+          // - The default template App.tsx is ~821 chars, so use 1000 as threshold
+          const fileCount = Object.keys(existingCode).length;
+          const isBlankProject =
+            !hasScreenFiles &&
+            (fileCount <= 1 || (fileCount <= 3 && appTsxContent.length < 1000));
+          const hasExistingAppCode = !isBlankProject && fileCount > 0;
 
           // Debug logging
           console.log("[Generate] Project detection:", {
