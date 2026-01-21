@@ -378,17 +378,27 @@ Always create src/services/api.ts with this exact code:
 ${buildApiServiceCode(apiBaseUrl)}
 \`\`\`
 
-## ALLOWED PACKAGES
-- react, react-native (all components)
+## ALLOWED PACKAGES (ONLY USE THESE - nothing else!)
+- react, react-native (all core components)
 - @react-navigation/native, @react-navigation/native-stack
 - react-native-safe-area-context, react-native-screens
 - expo-status-bar, expo-linear-gradient, expo-blur, expo-haptics
 
-## DO NOT USE
+## PROHIBITED PACKAGES (will cause runtime errors!)
+- react-native-date-picker (use custom date picker with TouchableOpacity)
+- react-native-calendars (build custom calendar UI)
+- react-native-picker (use custom dropdown with Modal + FlatList)
+- react-native-elements (use core react-native components)
+- react-native-paper (not available in Snack)
+- react-native-vector-icons (use emoji or custom icons)
 - axios (use fetch)
 - moment (use Date)
-- lodash
+- lodash (use native JS methods)
 - @react-navigation/stack (use native-stack)
+- Any package not in ALLOWED list above
+
+## CUSTOM DATE PICKER PATTERN (use this instead of react-native-date-picker)
+Build date selection with TouchableOpacity + Modal showing a calendar grid.
 
 ## OUTPUT FORMAT (JSON only):
 {
@@ -446,15 +456,27 @@ Always create src/services/api.ts with this exact code:
 ${buildApiServiceCode(apiBaseUrl)}
 \`\`\`
 
-## ALLOWED PACKAGES
-- react, react-native
+## ALLOWED PACKAGES (ONLY USE THESE - nothing else!)
+- react, react-native (all core components)
 - @react-navigation/native, @react-navigation/native-stack
 - react-native-safe-area-context, react-native-screens
 - expo-status-bar, expo-linear-gradient
 
-## DO NOT USE
-- axios, moment, lodash
-- expo-blur (Android perf issues)
+## PROHIBITED PACKAGES (will cause runtime errors!)
+- react-native-date-picker (use custom date picker with TouchableOpacity)
+- react-native-calendars (build custom calendar UI)
+- react-native-picker (use custom dropdown with Modal + FlatList)
+- react-native-elements (use core react-native components)
+- react-native-paper (not available in Snack)
+- react-native-vector-icons (use emoji or custom icons)
+- expo-blur (Android performance issues)
+- axios (use fetch)
+- moment (use Date)
+- lodash (use native JS methods)
+- Any package not in ALLOWED list above
+
+## CUSTOM DATE PICKER PATTERN
+Build date selection with TouchableOpacity + Modal showing a calendar grid.
 
 ## OUTPUT FORMAT (JSON only):
 {
@@ -539,6 +561,14 @@ export function buildCriticPrompt(): string {
 - @react-navigation/stack instead of @react-navigation/native-stack
 - React Native imports in web code
 - expo-blur used on Android (performance issues)
+- PROHIBITED packages that cause runtime errors in Expo Snack:
+  * react-native-date-picker
+  * react-native-calendars
+  * react-native-picker
+  * react-native-elements
+  * react-native-paper
+  * react-native-vector-icons
+  * moment, lodash, axios
 
 ### Runtime Errors
 - Undefined variables
