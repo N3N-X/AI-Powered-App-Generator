@@ -32,6 +32,7 @@ import {
   QrCode,
   ExternalLink,
   Globe,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -58,6 +59,7 @@ export function SnackEditor({ className }: SnackEditorProps) {
     setCurrentFile,
     updateCodeFile,
     setUnsavedChanges,
+    unsavedChanges,
   } = useProjectStore();
 
   // Snack SDK instance (only used for iOS/Android)
@@ -85,6 +87,9 @@ export function SnackEditor({ className }: SnackEditorProps) {
   // Track previous project ID and initialization
   const [prevProjectId, setPrevProjectId] = useState<string | null>(null);
   const [hasInitializedTabs, setHasInitializedTabs] = useState(false);
+
+  // Save state
+  const [isSaving, setIsSaving] = useState(false);
 
   // Determine if this is a WEB platform project
   const isWebProject = currentProject?.platform === "WEB";
@@ -153,10 +158,12 @@ export function SnackEditor({ className }: SnackEditorProps) {
         "expo-status-bar": { version: "*" },
         "expo-blur": { version: "*" },
         "expo-haptics": { version: "*" },
+        "expo-linear-gradient": { version: "*" },
         "react-native-safe-area-context": { version: "*" },
         "@expo/vector-icons": { version: "*" },
         "@react-navigation/native": { version: "*" },
         "@react-navigation/native-stack": { version: "*" },
+        "@react-navigation/bottom-tabs": { version: "*" },
         "react-native-screens": { version: "*" },
       },
       online: true, // Enable online mode for device previews
@@ -216,7 +223,7 @@ export function SnackEditor({ className }: SnackEditorProps) {
     }
   }, []);
 
-  // Handle editor content change
+  // Handle editor content change - updates local state and preview immediately
   const handleEditorChange = useCallback(
     (value: string | undefined) => {
       if (value !== undefined && currentFile && currentProject) {
@@ -225,7 +232,7 @@ export function SnackEditor({ className }: SnackEditorProps) {
           updateCodeFile(currentFile, value);
           setUnsavedChanges(true);
 
-          // Update Snack for iOS/Android projects
+          // Update Snack for iOS/Android projects (live preview)
           if (snack && !isWebProject) {
             snack.updateFiles({
               [currentFile]: {
@@ -234,7 +241,6 @@ export function SnackEditor({ className }: SnackEditorProps) {
               },
             });
           }
-          // Web projects will auto-refresh via the useEffect above
         }
       }
     },
@@ -242,11 +248,46 @@ export function SnackEditor({ className }: SnackEditorProps) {
       currentFile,
       currentProject,
       snack,
+      isWebProject,
       updateCodeFile,
       setUnsavedChanges,
-      isWebProject,
     ],
   );
+
+  // Manual save to database
+  const handleSave = useCallback(async () => {
+    if (!currentProject?.id) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/projects/${currentProject.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          codeFiles: currentProject.codeFiles,
+        }),
+      });
+
+      if (response.ok) {
+        setUnsavedChanges(false);
+        toast({
+          title: "Saved",
+          description: "Changes saved successfully",
+        });
+      } else {
+        throw new Error("Save failed");
+      }
+    } catch (error) {
+      console.error("Save failed:", error);
+      toast({
+        title: "Save failed",
+        description: "Could not save changes. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [currentProject?.id, currentProject?.codeFiles, setUnsavedChanges]);
 
   const handleCopy = () => {
     if (currentContent) {
@@ -497,6 +538,39 @@ export function SnackEditor({ className }: SnackEditorProps) {
             </div>
 
             <div className="flex items-center gap-1 px-3">
+              {/* Save button - always visible */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-7 w-7",
+                      isSaving
+                        ? "text-violet-400"
+                        : unsavedChanges
+                          ? "text-yellow-500 hover:text-yellow-400"
+                          : "text-slate-400 hover:text-white",
+                    )}
+                    onClick={handleSave}
+                    disabled={isSaving || !unsavedChanges}
+                  >
+                    {isSaving ? (
+                      <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {isSaving
+                    ? "Saving..."
+                    : unsavedChanges
+                      ? "Save changes"
+                      : "All changes saved"}
+                </TooltipContent>
+              </Tooltip>
+
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -875,12 +949,19 @@ export function SnackEditor({ className }: SnackEditorProps) {
             <span>
               {isWebProject ? "Web Preview" : `Expo SDK ${SNACK_SDK_VERSION}`}
             </span>
-            <span>
-              {isWebProject
-                ? "Live"
-                : snackState?.unsaved
-                  ? "Unsaved changes"
-                  : "Synced"}
+            <span className="flex items-center gap-2">
+              {isSaving && (
+                <span className="flex items-center gap-1 text-violet-400">
+                  <div className="w-3 h-3 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                  Saving...
+                </span>
+              )}
+              {!isSaving &&
+                (isWebProject
+                  ? "Live"
+                  : snackState?.unsaved
+                    ? "Unsaved changes"
+                    : "Synced")}
             </span>
           </div>
         </div>

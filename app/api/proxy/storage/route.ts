@@ -6,7 +6,13 @@ import {
   hasServiceAccess,
   proxyError,
   proxySuccess,
+  proxyCorsOptions,
 } from "@/lib/proxy";
+
+// Handle CORS preflight requests
+export async function OPTIONS() {
+  return proxyCorsOptions();
+}
 import {
   StorageUploadRequestSchema,
   StorageListRequestSchema,
@@ -201,7 +207,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       "This API key does not have access to the Storage service",
       "FORBIDDEN",
-      403
+      403,
     );
   }
 
@@ -211,7 +217,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       `Rate limit exceeded. Try again in ${Math.ceil((rateLimit.reset - Date.now()) / 1000)}s`,
       "RATE_LIMITED",
-      429
+      429,
     );
   }
 
@@ -228,7 +234,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       `Validation error: ${parsed.error.errors[0]?.message}`,
       "VALIDATION_ERROR",
-      400
+      400,
     );
   }
 
@@ -247,7 +253,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       `Storage limit exceeded. Used: ${Math.round(usedStorage / 1024 / 1024)}MB, Limit: ${Math.round(storageLimit / 1024 / 1024)}MB`,
       "STORAGE_LIMIT_EXCEEDED",
-      413
+      413,
     );
   }
 
@@ -271,7 +277,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       "S3/R2 storage not yet configured",
       "SERVICE_UNAVAILABLE",
-      503
+      503,
     );
   } else {
     // Local/development mode - use internal upload endpoint
@@ -333,7 +339,7 @@ export async function GET(request: NextRequest) {
     return proxyError(
       "This API key does not have access to the Storage service",
       "FORBIDDEN",
-      403
+      403,
     );
   }
 
@@ -351,7 +357,7 @@ export async function GET(request: NextRequest) {
     return proxyError(
       `Validation error: ${parsed.error.errors[0]?.message}`,
       "VALIDATION_ERROR",
-      400
+      400,
     );
   }
 
@@ -419,7 +425,7 @@ export async function DELETE(request: NextRequest) {
     return proxyError(
       "This API key does not have access to the Storage service",
       "FORBIDDEN",
-      403
+      403,
     );
   }
 

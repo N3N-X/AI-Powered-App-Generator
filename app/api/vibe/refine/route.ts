@@ -155,9 +155,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get API base URL from request
-    const protocol = request.headers.get("x-forwarded-proto") || "https";
+    // Get API base URL from request headers
+    // This ensures localhost works during development
     const host = request.headers.get("host") || "rux.sh";
+    const isLocalhost =
+      host.includes("localhost") || host.includes("127.0.0.1");
+    const protocol = isLocalhost
+      ? "http"
+      : request.headers.get("x-forwarded-proto") || "https";
     const apiBaseUrl = `${protocol}://${host}`;
 
     // Generate refined code

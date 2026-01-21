@@ -437,6 +437,13 @@ export async function extractProxyAuth(
   };
 }
 
+// CORS headers for proxy endpoints (needed for Expo Snack web player)
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, X-RUX-API-Key, Authorization",
+};
+
 /**
  * Create a standardized error response for proxy endpoints
  */
@@ -451,7 +458,7 @@ export function proxyError(
     }),
     {
       status,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...CORS_HEADERS },
     },
   );
 }
@@ -462,6 +469,16 @@ export function proxyError(
 export function proxySuccess<T>(data: T, status: number = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+  });
+}
+
+/**
+ * Handle CORS preflight OPTIONS request
+ */
+export function proxyCorsOptions(): Response {
+  return new Response(null, {
+    status: 204,
+    headers: CORS_HEADERS,
   });
 }

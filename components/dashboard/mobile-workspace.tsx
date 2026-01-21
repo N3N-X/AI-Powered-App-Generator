@@ -37,6 +37,7 @@ import {
   Monitor,
   QrCode,
   ExternalLink,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -78,6 +79,8 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
     setIsGenerating,
     setCodeFiles,
     updateCodeFile,
+    unsavedChanges,
+    setUnsavedChanges,
   } = useProjectStore();
 
   const remainingCredits = useRemainingCredits();
@@ -96,6 +99,9 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
   const [editingFeature, setEditingFeature] = useState<number | null>(null);
   const [newFeature, setNewFeature] = useState("");
   const [newScreenName, setNewScreenName] = useState("");
+
+  // Save state
+  const [isSaving, setIsSaving] = useState(false);
 
   // Snack SDK state
   const [snack, setSnack] = useState<InstanceType<typeof Snack> | null>(null);
@@ -149,6 +155,7 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
         "@expo/vector-icons": { version: "*" },
         "@react-navigation/native": { version: "*" },
         "@react-navigation/native-stack": { version: "*" },
+        "@react-navigation/bottom-tabs": { version: "*" },
         "react-native-screens": { version: "*" },
       },
       online: true,
@@ -568,10 +575,56 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
     (value: string | undefined) => {
       if (value !== undefined && currentFile && currentProject) {
         updateCodeFile(currentFile, value);
+        setUnsavedChanges(true);
+
+        // Update Snack for live preview
+        if (snack) {
+          snack.updateFiles({
+            [currentFile]: {
+              type: "CODE",
+              contents: value,
+            },
+          });
+        }
       }
     },
-    [currentFile, currentProject, updateCodeFile],
+    [currentFile, currentProject, updateCodeFile, setUnsavedChanges, snack],
   );
+
+  // Manual save to database
+  const handleSave = useCallback(async () => {
+    if (!currentProject?.id) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/projects/${currentProject.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          codeFiles: currentProject.codeFiles,
+        }),
+      });
+
+      if (response.ok) {
+        setUnsavedChanges(false);
+        toast({
+          title: "Saved",
+          description: "Changes saved successfully",
+        });
+      } else {
+        throw new Error("Save failed");
+      }
+    } catch (error) {
+      console.error("Save failed:", error);
+      toast({
+        title: "Save failed",
+        description: "Could not save changes. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [currentProject?.id, currentProject?.codeFiles, setUnsavedChanges]);
 
   const handleCloseTab = (filePath: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1144,34 +1197,70 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
                 {/* Editor Section */}
                 <div className="flex-1 flex flex-col">
                   {/* Tabs */}
-                  <div className="flex items-center border-b border-white/5 bg-black/20 overflow-x-auto">
-                    {openTabs.map((filePath) => {
-                      const fileName = filePath.split("/").pop() || filePath;
-                      const isActive = filePath === currentFile;
-                      return (
-                        <div
-                          key={filePath}
-                          onClick={() => setCurrentFile(filePath)}
-                          className={cn(
-                            "flex items-center gap-2 px-4 py-2.5 text-sm border-r border-white/5 cursor-pointer group",
-                            isActive
-                              ? "bg-white/5 text-white border-b-2 border-b-violet-500"
-                              : "text-slate-400 hover:text-white hover:bg-white/5",
-                          )}
-                        >
-                          <File className="h-3.5 w-3.5" />
-                          <span className="truncate max-w-[100px]">
-                            {fileName}
-                          </span>
-                          <button
-                            onClick={(e) => handleCloseTab(filePath, e)}
-                            className="opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded p-0.5"
+                  <div className="flex items-center justify-between border-b border-white/5 bg-black/20">
+                    <div className="flex items-center overflow-x-auto">
+                      {openTabs.map((filePath) => {
+                        const fileName = filePath.split("/").pop() || filePath;
+                        const isActive = filePath === currentFile;
+                        return (
+                          <div
+                            key={filePath}
+                            onClick={() => setCurrentFile(filePath)}
+                            className={cn(
+                              "flex items-center gap-2 px-4 py-2.5 text-sm border-r border-white/5 cursor-pointer group",
+                              isActive
+                                ? "bg-white/5 text-white border-b-2 border-b-violet-500"
+                                : "text-slate-400 hover:text-white hover:bg-white/5",
+                            )}
                           >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
+                            <File className="h-3.5 w-3.5" />
+                            <span className="truncate max-w-[100px]">
+                              {fileName}
+                            </span>
+                            <button
+                              onClick={(e) => handleCloseTab(filePath, e)}
+                              className="opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded p-0.5"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Save button */}
+                    <div className="px-3">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              "h-7 w-7",
+                              isSaving
+                                ? "text-violet-400"
+                                : unsavedChanges
+                                  ? "text-yellow-500 hover:text-yellow-400"
+                                  : "text-slate-400 hover:text-white",
+                            )}
+                            onClick={handleSave}
+                            disabled={isSaving || !unsavedChanges}
+                          >
+                            {isSaving ? (
+                              <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Save className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {isSaving
+                            ? "Saving..."
+                            : unsavedChanges
+                              ? "Save changes"
+                              : "All changes saved"}
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   </div>
 
                   {/* Editor */}

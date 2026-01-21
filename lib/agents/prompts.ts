@@ -159,9 +159,8 @@ export const db = {
   }
 };`);
 
-  // Auth if needed
-  if (spec.authRequired) {
-    services.push(`
+  // Always include auth - screens may use it even if not explicitly required in spec
+  services.push(`
 // Authentication
 export const auth = {
   signup: async (email: string, password: string, metadata?: any) => {
@@ -193,7 +192,6 @@ export const auth = {
     return res.json();
   }
 };`);
-  }
 
   // Payments if needed
   if (spec.paymentsRequired) {
@@ -616,7 +614,8 @@ CRITICAL: Your code MUST work without errors. Only use packages from the ALLOWED
 
 ## ALLOWED PACKAGES (ONLY USE THESE - nothing else!)
 - react, react-native (View, Text, TouchableOpacity, ScrollView, FlatList, Modal, TextInput, Image, StyleSheet, etc.)
-- @react-navigation/native, @react-navigation/native-stack
+- @react-navigation/native, @react-navigation/native-stack, @react-navigation/bottom-tabs
+- @expo/vector-icons (Ionicons, MaterialIcons, FontAwesome, etc.)
 - react-native-safe-area-context, react-native-screens
 - expo-status-bar, expo-linear-gradient, expo-blur, expo-haptics
 
@@ -628,18 +627,121 @@ DO NOT import any of these - they don't exist in Expo Snack:
 - @react-navigation/stack (use native-stack instead)
 - ANY other third-party package not in ALLOWED list
 
-## REQUIRED IMPORTS (copy exactly)
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Modal, TextInput, Image, Platform } from 'react-native';
+## APP.TSX STRUCTURE - USE TAB NAVIGATION WITH GLASSMORPHISM (CRITICAL!)
+ALL apps MUST use bottom tab navigation with icons and GLASSMORPHISM blur effect. Follow this exact pattern:
+
+\`\`\`typescript
+import React from 'react';
+import { StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import * as Haptics from 'expo-haptics';
 
-## CORRECT LinearGradient USAGE
+// CRITICAL: Import ALL screens
+import HomeScreen from './src/screens/HomeScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import LoginScreen from './src/screens/LoginScreen';
+// ... import ALL other screens
+
+const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
+
+function MainTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        // GLASSMORPHISM TAB BAR - Use BlurView for liquid glass effect
+        tabBarBackground: () => (
+          <BlurView
+            intensity={80}
+            tint="dark"
+            style={StyleSheet.absoluteFill}
+          />
+        ),
+        tabBarStyle: {
+          position: 'absolute',
+          backgroundColor: 'transparent',
+          borderTopColor: 'transparent',
+          borderTopWidth: 0,
+          paddingBottom: 5,
+          height: 60,
+        },
+        tabBarActiveTintColor: '#6366F1',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.6)',
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName;
+          if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
+          else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
+          else if (route.name === 'Settings') iconName = focused ? 'settings' : 'settings-outline';
+          // Add more icons for other tabs as needed
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+      })}
+    >
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
+    </Tab.Navigator>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Main" component={MainTabs} />
+          <Stack.Screen name="Login" component={LoginScreen} options={{ presentation: 'modal' }} />
+          {/* Add detail screens here that open as modals or push views */}
+        </Stack.Navigator>
+      </NavigationContainer>
+      <StatusBar style="light" />
+    </SafeAreaProvider>
+  );
+}
+\`\`\`
+
+## IONICONS REFERENCE (use these icon names)
+- home / home-outline (Home tab)
+- person / person-outline (Profile tab)
+- settings / settings-outline (Settings tab)
+- search / search-outline (Search tab)
+- heart / heart-outline (Favorites tab)
+- cart / cart-outline (Cart tab)
+- notifications / notifications-outline (Notifications)
+- add-circle / add-circle-outline (Create/Add)
+- chatbubble / chatbubble-outline (Messages)
+- bookmark / bookmark-outline (Saved)
+
+## GLASSMORPHISM WITH BlurView
+\`\`\`typescript
+import { BlurView } from 'expo-blur';
+
+// Glass card component
+<BlurView
+  intensity={80}
+  tint="dark"
+  style={{
+    borderRadius: 20,
+    overflow: 'hidden', // REQUIRED for borderRadius
+    padding: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  }}
+>
+  <Text style={{ color: 'white' }}>Glass content</Text>
+</BlurView>
+\`\`\`
+
+## LinearGradient USAGE
+\`\`\`typescript
+import { LinearGradient } from 'expo-linear-gradient';
+
 <LinearGradient
   colors={['#667eea', '#764ba2']}
   start={{ x: 0, y: 0 }}
@@ -648,53 +750,15 @@ import * as Haptics from 'expo-haptics';
 >
   <Text>Content</Text>
 </LinearGradient>
+\`\`\`
 
-## FOR DATE/TIME SELECTION - BUILD CUSTOM UI
-Instead of date picker packages, create simple UI:
-- TouchableOpacity that opens a Modal
-- Inside Modal: month/year navigation + calendar grid
-- Use Date() for date manipulation
-
-## APP.TSX STRUCTURE (CRITICAL - follow exactly)
-IMPORTANT: You MUST import ALL screen components at the top of App.tsx before using them!
-
-// App.tsx example:
-import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-
-// CRITICAL: Import ALL screens you use in Stack.Screen
-import HomeScreen from './src/screens/HomeScreen';
-import LoginScreen from './src/screens/LoginScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-// ... import every screen!
-
-const Stack = createNativeStackNavigator();
-
-export default function App() {
-  return (
-    <SafeAreaProvider>
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
-      <StatusBar style="light" />
-    </SafeAreaProvider>
-  );
-}
-
-RULE: Every component used in Stack.Screen MUST be imported from its file!
-
-## iOS DESIGN
-- Glassmorphism with BlurView
+## iOS DESIGN PRINCIPLES
+- Glassmorphism with BlurView for cards and overlays
 - Large titles, rounded corners (16-20px)
 - Safe area support with useSafeAreaInsets
 - Haptic feedback: Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+- Tab bar with icons at bottom
+- Smooth animations and transitions
 
 ## API SERVICES (import from src/services/api.ts)
 DO NOT generate src/services/api.ts - it will be provided automatically.
@@ -710,13 +774,13 @@ Available functions:
 
 ## CRITICAL APP FLOW RULES
 1. NEVER start app on login screen
-2. First screen should be a LANDING PAGE or MAIN CONTENT
-3. If auth is needed: Landing -> Login (optional) -> Main Content
+2. Main tabs (Home, Profile, etc.) should be the default view
+3. Login/Auth screens should be modals that overlay the app
 4. User should see value BEFORE being asked to login
 
 ## OUTPUT FORMAT (JSON only, no markdown):
 {
-  "App.tsx": "complete working code",
+  "App.tsx": "complete working code with tab navigation",
   "src/screens/LandingScreen.tsx": "first screen user sees",
   "src/screens/HomeScreen.tsx": "main content screen"
 }
@@ -741,7 +805,8 @@ CRITICAL: Your code MUST work without errors. Only use packages from the ALLOWED
 
 ## ALLOWED PACKAGES (ONLY USE THESE - nothing else!)
 - react, react-native (View, Text, TouchableOpacity, Pressable, ScrollView, FlatList, Modal, TextInput, Image, StyleSheet, Platform, etc.)
-- @react-navigation/native, @react-navigation/native-stack
+- @react-navigation/native, @react-navigation/native-stack, @react-navigation/bottom-tabs
+- @expo/vector-icons (MaterialIcons, Ionicons, FontAwesome, etc.)
 - react-native-safe-area-context, react-native-screens
 - expo-status-bar, expo-linear-gradient
 
@@ -749,66 +814,113 @@ CRITICAL: Your code MUST work without errors. Only use packages from the ALLOWED
 DO NOT import any of these - they don't exist in Expo Snack:
 - react-native-date-picker, react-native-calendars, react-native-picker
 - react-native-elements, react-native-paper, react-native-vector-icons
-- expo-blur (causes Android performance issues)
+- expo-blur (causes Android performance issues - use LinearGradient instead)
 - axios, moment, lodash, date-fns
 - @react-navigation/stack (use native-stack instead)
 - ANY other third-party package not in ALLOWED list
 
-## REQUIRED IMPORTS (copy exactly)
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Pressable, StyleSheet, ScrollView, FlatList, Modal, TextInput, Image, Platform } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
+## APP.TSX STRUCTURE - USE TAB NAVIGATION (CRITICAL!)
+ALL apps MUST use bottom tab navigation with icons. Follow this exact pattern:
 
-## ANDROID DESIGN (Material Design 3)
-- Use elevation for shadows: { elevation: 4 }
-- Ripple effects: <Pressable android_ripple={{ color: 'rgba(0,0,0,0.1)' }}>
-- Rounded corners (12-16px)
-- FAB for primary actions
-
-## APP.TSX STRUCTURE (CRITICAL - follow exactly)
-IMPORTANT: You MUST import ALL screen components at the top of App.tsx before using them!
-
-// App.tsx example:
+\`\`\`typescript
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { MaterialIcons } from '@expo/vector-icons';
 
-// CRITICAL: Import ALL screens you use in Stack.Screen
+// CRITICAL: Import ALL screens
 import HomeScreen from './src/screens/HomeScreen';
-import LoginScreen from './src/screens/LoginScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
-// ... import every screen!
+import SettingsScreen from './src/screens/SettingsScreen';
+import LoginScreen from './src/screens/LoginScreen';
+// ... import ALL other screens
 
+const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+
+function MainTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: '#1a1a2e',
+          borderTopColor: '#2a2a4e',
+          paddingBottom: 5,
+          height: 60,
+          elevation: 8,
+        },
+        tabBarActiveTintColor: '#6366F1',
+        tabBarInactiveTintColor: '#888',
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName;
+          if (route.name === 'Home') iconName = 'home';
+          else if (route.name === 'Profile') iconName = 'person';
+          else if (route.name === 'Settings') iconName = 'settings';
+          // Add more icons for other tabs as needed
+          return <MaterialIcons name={iconName} size={size} color={color} />;
+        },
+      })}
+    >
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
+    </Tab.Navigator>
+  );
+}
 
 export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen name="Main" component={MainTabs} />
+          <Stack.Screen name="Login" component={LoginScreen} options={{ presentation: 'modal' }} />
+          {/* Add detail screens here that open as modals or push views */}
         </Stack.Navigator>
       </NavigationContainer>
       <StatusBar style="light" />
     </SafeAreaProvider>
   );
 }
+\`\`\`
 
-RULE: Every component used in Stack.Screen MUST be imported from its file!
+## MATERIALICONS REFERENCE (use these icon names)
+- home (Home tab)
+- person (Profile tab)
+- settings (Settings tab)
+- search (Search tab)
+- favorite (Favorites tab)
+- shopping-cart (Cart tab)
+- notifications (Notifications)
+- add-circle (Create/Add)
+- chat (Messages)
+- bookmark (Saved)
 
-## FOR DATE/TIME SELECTION - BUILD CUSTOM UI
-Instead of date picker packages, create simple UI:
-- TouchableOpacity that opens a Modal
-- Inside Modal: month/year navigation + calendar grid
-- Use Date() for date manipulation
+## ANDROID DESIGN (Material Design 3)
+- Use elevation for shadows: { elevation: 4 }
+- Ripple effects: <Pressable android_ripple={{ color: 'rgba(0,0,0,0.1)' }}>
+- Rounded corners (12-16px)
+- FAB for primary actions
+- Tab bar with icons at bottom
+- Material color scheme
+
+## LinearGradient USAGE (use instead of BlurView on Android)
+\`\`\`typescript
+import { LinearGradient } from 'expo-linear-gradient';
+
+<LinearGradient
+  colors={['#667eea', '#764ba2']}
+  start={{ x: 0, y: 0 }}
+  end={{ x: 1, y: 1 }}
+  style={{ flex: 1 }}
+>
+  <Text>Content</Text>
+</LinearGradient>
+\`\`\`
 
 ## API SERVICES (import from src/services/api.ts)
 DO NOT generate src/services/api.ts - it will be provided automatically.
@@ -824,15 +936,16 @@ Available functions:
 
 ## CRITICAL APP FLOW RULES
 1. NEVER start app on login screen
-2. First screen should be a LANDING PAGE or MAIN CONTENT
-3. If auth is needed: Landing -> Login (optional) -> Main Content
+2. Main tabs (Home, Profile, etc.) should be the default view
+3. Login/Auth screens should be modals that overlay the app
 4. User should see value BEFORE being asked to login
 
 ## OUTPUT FORMAT (JSON only, no markdown):
 {
-  "App.tsx": "complete working code",
-  "src/screens/LandingScreen.tsx": "first screen user sees",
-  "src/screens/HomeScreen.tsx": "main content screen"
+  "App.tsx": "complete working code with tab navigation",
+  "src/screens/HomeScreen.tsx": "main content screen",
+  "src/screens/ProfileScreen.tsx": "profile screen",
+  "src/screens/SettingsScreen.tsx": "settings screen"
 }
 
 DO NOT include src/services/api.ts in your output - it's auto-generated.`;

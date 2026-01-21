@@ -10,7 +10,13 @@ import {
   hasServiceAccess,
   proxyError,
   proxySuccess,
+  proxyCorsOptions,
 } from "@/lib/proxy";
+
+// Handle CORS preflight requests
+export async function OPTIONS() {
+  return proxyCorsOptions();
+}
 import { AppAuthProxyRequestSchema } from "@/types/proxy";
 import { ProxyService, Prisma } from "@prisma/client";
 import prisma from "@/lib/db";

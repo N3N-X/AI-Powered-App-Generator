@@ -8,7 +8,13 @@ import {
   hasServiceAccess,
   proxyError,
   proxySuccess,
+  proxyCorsOptions,
 } from "@/lib/proxy";
+
+// Handle CORS preflight requests
+export async function OPTIONS() {
+  return proxyCorsOptions();
+}
 import {
   MapsGeocodeRequestSchema,
   MapsDirectionsRequestSchema,
@@ -129,7 +135,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       "This API key does not have access to the Maps service",
       "FORBIDDEN",
-      403
+      403,
     );
   }
 
@@ -139,7 +145,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       `Rate limit exceeded. Try again in ${Math.ceil((rateLimit.reset - Date.now()) / 1000)}s`,
       "RATE_LIMITED",
-      429
+      429,
     );
   }
 
@@ -157,7 +163,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       "Invalid operation. Must be one of: geocode, directions, places",
       "VALIDATION_ERROR",
-      400
+      400,
     );
   }
 
@@ -167,7 +173,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       `Insufficient credits. Required: 1, Available: ${creditCheck.available}`,
       "INSUFFICIENT_CREDITS",
-      402
+      402,
     );
   }
 
@@ -176,7 +182,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       "Google Maps service not configured",
       "SERVICE_UNAVAILABLE",
-      503
+      503,
     );
   }
 
@@ -191,15 +197,18 @@ export async function POST(request: NextRequest) {
           return proxyError(
             `Validation error: ${parsed.error.errors[0]?.message}`,
             "VALIDATION_ERROR",
-            400
+            400,
           );
         }
         validatedParams = parsed.data;
 
         const geocodeParams = new URLSearchParams({ key: googleMapsApiKey });
-        if (validatedParams.address) geocodeParams.set("address", validatedParams.address);
-        if (validatedParams.latlng) geocodeParams.set("latlng", validatedParams.latlng);
-        if (validatedParams.placeId) geocodeParams.set("place_id", validatedParams.placeId);
+        if (validatedParams.address)
+          geocodeParams.set("address", validatedParams.address);
+        if (validatedParams.latlng)
+          geocodeParams.set("latlng", validatedParams.latlng);
+        if (validatedParams.placeId)
+          geocodeParams.set("place_id", validatedParams.placeId);
 
         url = `${GOOGLE_MAPS_BASE_URL}/geocode/json?${geocodeParams}`;
         break;
@@ -211,7 +220,7 @@ export async function POST(request: NextRequest) {
           return proxyError(
             `Validation error: ${parsed.error.errors[0]?.message}`,
             "VALIDATION_ERROR",
-            400
+            400,
           );
         }
         validatedParams = parsed.data;
@@ -239,16 +248,20 @@ export async function POST(request: NextRequest) {
           return proxyError(
             `Validation error: ${parsed.error.errors[0]?.message}`,
             "VALIDATION_ERROR",
-            400
+            400,
           );
         }
         validatedParams = parsed.data;
 
         const placesParams = new URLSearchParams({ key: googleMapsApiKey });
-        if (validatedParams.query) placesParams.set("query", validatedParams.query);
-        if (validatedParams.location) placesParams.set("location", validatedParams.location);
-        if (validatedParams.radius) placesParams.set("radius", String(validatedParams.radius));
-        if (validatedParams.type) placesParams.set("type", validatedParams.type);
+        if (validatedParams.query)
+          placesParams.set("query", validatedParams.query);
+        if (validatedParams.location)
+          placesParams.set("location", validatedParams.location);
+        if (validatedParams.radius)
+          placesParams.set("radius", String(validatedParams.radius));
+        if (validatedParams.type)
+          placesParams.set("type", validatedParams.type);
 
         url = `${GOOGLE_MAPS_BASE_URL}/place/textsearch/json?${placesParams}`;
         break;
@@ -278,7 +291,7 @@ export async function POST(request: NextRequest) {
       return proxyError(
         data.error_message || `Maps API error: ${data.status}`,
         "MAPS_ERROR",
-        400
+        400,
       );
     }
 
@@ -323,7 +336,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       "Failed to connect to Google Maps",
       "SERVICE_UNAVAILABLE",
-      503
+      503,
     );
   }
 }

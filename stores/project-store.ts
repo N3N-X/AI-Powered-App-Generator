@@ -10,6 +10,7 @@ interface Project {
   slug: string;
   platform: "WEB" | "IOS" | "ANDROID";
   codeFiles: CodeFiles;
+  chatHistory: ChatMessage[];
   appConfig: AppConfig | null;
   githubRepo: string | null;
   githubUrl: string | null;
@@ -79,20 +80,17 @@ export const useProjectStore = create<ProjectState>()(
 
       // Project actions
       setCurrentProject: (project) => {
-        // Load chat history for this project from localStorage
+        // Load chat history from project's chatHistory field (stored in DB)
         let projectMessages: ChatMessage[] = [];
-        if (project) {
+        if (project?.chatHistory) {
           try {
-            const saved = localStorage.getItem(`rux-chat-${project.id}`);
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              if (Array.isArray(parsed)) {
-                projectMessages = parsed.map((msg: any) => ({
-                  ...msg,
-                  timestamp: new Date(msg.timestamp),
-                }));
-              }
-            }
+            const history = Array.isArray(project.chatHistory)
+              ? project.chatHistory
+              : [];
+            projectMessages = history.map((msg: any) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp),
+            }));
           } catch (error) {
             console.error("Failed to load chat history:", error);
           }
@@ -232,16 +230,15 @@ export const useProjectStore = create<ProjectState>()(
 
         set({ messages: newMessages });
 
-        // Save to localStorage for persistence
+        // Save to database
         if (currentProject) {
-          try {
-            localStorage.setItem(
-              `rux-chat-${currentProject.id}`,
-              JSON.stringify(newMessages),
-            );
-          } catch (error) {
+          fetch(`/api/projects/${currentProject.id}/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: newMessages }),
+          }).catch((error) => {
             console.error("Failed to save chat history:", error);
-          }
+          });
         }
       },
 
@@ -249,13 +246,13 @@ export const useProjectStore = create<ProjectState>()(
         const { currentProject } = get();
         set({ messages: [] });
 
-        // Clear from localStorage
+        // Clear from database
         if (currentProject) {
-          try {
-            localStorage.removeItem(`rux-chat-${currentProject.id}`);
-          } catch (error) {
+          fetch(`/api/projects/${currentProject.id}/chat`, {
+            method: "DELETE",
+          }).catch((error) => {
             console.error("Failed to clear chat history:", error);
-          }
+          });
         }
       },
 

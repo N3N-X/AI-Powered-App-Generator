@@ -354,6 +354,8 @@ function ensureConfigFiles(
     "react-native": "0.76.5",
     "@react-navigation/native": "^7.0.0",
     "@react-navigation/native-stack": "^7.0.0",
+    "@react-navigation/bottom-tabs": "^7.0.0",
+    "@expo/vector-icons": "^14.0.0",
     "react-native-safe-area-context": "4.12.0",
     "react-native-screens": "~4.4.0",
   };

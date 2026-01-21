@@ -8,7 +8,13 @@ import {
   hasServiceAccess,
   proxyError,
   proxySuccess,
+  proxyCorsOptions,
 } from "@/lib/proxy";
+
+// Handle CORS preflight requests
+export async function OPTIONS() {
+  return proxyCorsOptions();
+}
 import { EmailProxyRequestSchema } from "@/types/proxy";
 import { ProxyService } from "@prisma/client";
 

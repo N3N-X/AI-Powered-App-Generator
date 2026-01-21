@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { validateApiKey } from "@/lib/proxy";
+import { validateApiKey, proxyCorsOptions } from "@/lib/proxy";
+
+// Handle CORS preflight requests
+export async function OPTIONS() {
+  return proxyCorsOptions();
+}
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2025-02-24.acacia",

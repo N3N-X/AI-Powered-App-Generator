@@ -86,6 +86,9 @@ model Project {
   // Code storage - JSONB for flexible file structure
   codeFiles   Json     @default("{}") // { "App.tsx": "...", "screens/Home.tsx": "..." }
 
+  // Chat history - stored as JSON array of messages
+  chatHistory Json     @default("[]") // [{ role: "user"|"assistant", content: "...", timestamp: "..." }]
+
   // App configuration
   appConfig   Json?    // { "name": "...", "version": "...", "expo": {...} }
 

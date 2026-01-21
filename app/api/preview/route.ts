@@ -190,9 +190,9 @@ function generatePreviewHtml(
   const allCode = Object.values(codeFiles).join("\n");
   const commonDeps: Record<string, string> = {
     "react-native-paper": "*",
-    "@react-navigation/native": "^6.1.0",
-    "@react-navigation/native-stack": "^6.9.0",
-    "@react-navigation/bottom-tabs": "^6.5.0",
+    "@react-navigation/native": "^7.0.0",
+    "@react-navigation/native-stack": "^7.0.0",
+    "@react-navigation/bottom-tabs": "^7.0.0",
     "react-native-screens": "~4.0.0",
     "react-native-safe-area-context": "4.12.0",
     "@react-native-async-storage/async-storage": "2.1.0",

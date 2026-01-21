@@ -8,7 +8,13 @@ import {
   hasServiceAccess,
   proxyError,
   proxySuccess,
+  proxyCorsOptions,
 } from "@/lib/proxy";
+
+// Handle CORS preflight requests
+export async function OPTIONS() {
+  return proxyCorsOptions();
+}
 import { SMSProxyRequestSchema } from "@/types/proxy";
 import { ProxyService } from "@prisma/client";
 
@@ -95,7 +101,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       "This API key does not have access to the SMS service",
       "FORBIDDEN",
-      403
+      403,
     );
   }
 
@@ -105,7 +111,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       `Rate limit exceeded. Try again in ${Math.ceil((rateLimit.reset - Date.now()) / 1000)}s`,
       "RATE_LIMITED",
-      429
+      429,
     );
   }
 
@@ -122,7 +128,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       `Validation error: ${parsed.error.errors[0]?.message}`,
       "VALIDATION_ERROR",
-      400
+      400,
     );
   }
 
@@ -138,7 +144,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       `Insufficient credits. Required: ${creditsRequired}, Available: ${creditCheck.available}`,
       "INSUFFICIENT_CREDITS",
-      402
+      402,
     );
   }
 
@@ -165,7 +171,7 @@ export async function POST(request: NextRequest) {
         Authorization:
           "Basic " +
           Buffer.from(`${twilioAccountSid}:${twilioAuthToken}`).toString(
-            "base64"
+            "base64",
           ),
       },
       body: formData.toString(),
@@ -193,7 +199,7 @@ export async function POST(request: NextRequest) {
       return proxyError(
         data.message || "Failed to send SMS",
         "SMS_ERROR",
-        response.status
+        response.status,
       );
     }
 
@@ -242,7 +248,7 @@ export async function POST(request: NextRequest) {
     return proxyError(
       "Failed to connect to SMS service",
       "SERVICE_UNAVAILABLE",
-      503
+      503,
     );
   }
 }
