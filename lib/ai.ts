@@ -182,7 +182,7 @@ Remember:
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "grok-code-fast-1",
+      model: "grok-4-1-fast-reasoning",
       messages: [{ role: "system", content: systemPrompt }, ...messages],
       temperature: 0.7,
       max_tokens: 32768,
