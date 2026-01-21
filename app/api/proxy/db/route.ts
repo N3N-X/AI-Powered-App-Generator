@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
         });
 
         // Filter documents in memory
-        let filtered = docs.filter((doc) =>
+        const filtered = docs.filter((doc) =>
           matchesFilter(doc.data as Record<string, unknown>, filter),
         );
 
