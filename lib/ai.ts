@@ -12,62 +12,79 @@ function buildSystemPrompt(apiBaseUrl: string): string {
 2. Use @react-navigation/native-stack (NOT @react-navigation/stack)
 3. ALWAYS use absolute URLs: ${apiBaseUrl}/api/proxy/...
 4. NEVER use relative URLs like /api/... (they won't work in preview)
+5. DO NOT add login/authentication unless the user EXPLICITLY asks for it
+6. Start the app on the MAIN functionality screen, not a login screen
 
 ## API CONFIGURATION
 Always create a src/services/api.ts file with:
 \`\`\`typescript
 const API_BASE = '${apiBaseUrl}';
 const API_KEY = 'USER_API_KEY'; // User replaces this with their actual key
+
+const headers = {
+  'Content-Type': 'application/json',
+  'X-RUX-API-Key': API_KEY
+};
 \`\`\`
 
-## AVAILABLE PROXY SERVICES (all use POST with JSON body):
+## DATABASE API - ${apiBaseUrl}/api/proxy/db
+Use this for ALL data storage. Operations: create, findOne, findMany, update, delete, count
 
-### 1. DATABASE - ${apiBaseUrl}/api/proxy/db
-Store any data. Operations: create, findOne, findMany, update, delete, count
 \`\`\`typescript
-// Create
-fetch(\`\${API_BASE}/api/proxy/db\`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', 'X-RUX-API-Key': API_KEY },
-  body: JSON.stringify({ collection: 'items', operation: 'create', data: { name: 'Test' } })
-});
-// Read all
-fetch(\`\${API_BASE}/api/proxy/db\`, { method: 'POST', headers: {...}, body: JSON.stringify({ collection: 'items', operation: 'findMany' }) });
-// Update
-fetch(\`\${API_BASE}/api/proxy/db\`, { method: 'POST', headers: {...}, body: JSON.stringify({ collection: 'items', operation: 'update', filter: { id }, data: { name: 'Updated' } }) });
-// Delete
-fetch(\`\${API_BASE}/api/proxy/db\`, { method: 'POST', headers: {...}, body: JSON.stringify({ collection: 'items', operation: 'delete', filter: { id } }) });
+// CREATE - save new data
+export const createBooking = async (data: any) => {
+  const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ collection: 'bookings', operation: 'create', data })
+  });
+  return res.json();
+};
+
+// READ - get all items
+export const getBookings = async () => {
+  const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ collection: 'bookings', operation: 'findMany' })
+  });
+  const result = await res.json();
+  return result.data || [];
+};
+
+// UPDATE
+export const updateBooking = async (id: string, data: any) => {
+  const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ collection: 'bookings', operation: 'update', filter: { id }, data })
+  });
+  return res.json();
+};
+
+// DELETE
+export const deleteBooking = async (id: string) => {
+  const res = await fetch(\`\${API_BASE}/api/proxy/db\`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ collection: 'bookings', operation: 'delete', filter: { id } })
+  });
+  return res.json();
+};
 \`\`\`
 
-### 2. AUTH - ${apiBaseUrl}/api/proxy/auth
-User authentication. Operations: signup, login, logout, me, updateProfile, changePassword
-\`\`\`typescript
-// Signup: { operation: 'signup', email, password, name }
-// Login: { operation: 'login', email, password } -> returns { token, user }
-// Get current user: { operation: 'me', token }
-\`\`\`
-
-### 3. EMAIL - ${apiBaseUrl}/api/proxy/email
-Send emails via SendGrid: { to, subject, text?, html? }
-
-### 4. SMS - ${apiBaseUrl}/api/proxy/sms
-Send SMS via Twilio: { to: '+1234567890', message }
-
-### 5. MAPS - ${apiBaseUrl}/api/proxy/maps
-Google Maps API: { operation: 'geocode'|'directions'|'places', ...params }
-
-### 6. STORAGE - ${apiBaseUrl}/api/proxy/storage
-File uploads: POST { filename, contentType, size } -> returns uploadUrl
-
-### 7. AI - ${apiBaseUrl}/api/proxy/openai
-OpenAI chat: { messages: [{ role, content }], model?: 'gpt-4o-mini' }
+## OTHER AVAILABLE SERVICES (use only when needed):
+- EMAIL: ${apiBaseUrl}/api/proxy/email - { to, subject, text?, html? }
+- SMS: ${apiBaseUrl}/api/proxy/sms - { to: '+1234567890', message }
+- MAPS: ${apiBaseUrl}/api/proxy/maps - { operation: 'geocode'|'directions'|'places', ...params }
+- STORAGE: ${apiBaseUrl}/api/proxy/storage - { filename, contentType, size }
+- AI: ${apiBaseUrl}/api/proxy/openai - { messages: [{ role, content }] }
 
 ## PACKAGES - use exactly:
 - @react-navigation/native: ^7.0.0
 - @react-navigation/native-stack: ^7.0.0
 - react-native-screens: ~4.4.0
 - react-native-safe-area-context: 4.12.0
-- expo-secure-store: ~14.0.0
 
 ## OUTPUT:
 Return ONLY valid JSON. No markdown, no \`\`\`, no text.
