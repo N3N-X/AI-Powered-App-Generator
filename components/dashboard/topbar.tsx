@@ -584,14 +584,15 @@ export function Topbar() {
                       className="h-8 w-8 rounded-full"
                     >
                       <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white">
-                        {authUser.photoURL ? (
+                        {authUser.user_metadata?.avatar_url ? (
                           <img
-                            src={authUser.photoURL}
+                            src={authUser.user_metadata.avatar_url}
                             alt="Profile"
                             className="h-full w-full rounded-full object-cover"
                           />
                         ) : (
-                          authUser.displayName?.[0] ||
+                          authUser.user_metadata?.display_name?.[0] ||
+                          authUser.user_metadata?.full_name?.[0] ||
                           authUser.email?.[0]?.toUpperCase()
                         )}
                       </div>
@@ -604,7 +605,9 @@ export function Topbar() {
                 <DropdownMenuLabel>
                   <div className="flex flex-col">
                     <span className="text-sm font-medium">
-                      {authUser.displayName || "User"}
+                      {authUser.user_metadata?.display_name ||
+                        authUser.user_metadata?.full_name ||
+                        "User"}
                     </span>
                     <span className="text-xs text-gray-500 dark:text-slate-400">
                       {authUser.email}

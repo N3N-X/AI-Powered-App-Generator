@@ -20,6 +20,9 @@ interface AuthContextType {
     displayName?: string,
   ) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  signInWithOAuth: (
+    provider: "google" | "github" | "azure" | "apple" | "gitlab" | "bitbucket",
+  ) => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateUserProfile: (displayName?: string, photoURL?: string) => Promise<void>;
@@ -79,7 +82,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+      },
+    });
+    if (error) throw error;
+  };
+
+  const signInWithOAuth = async (
+    provider: "google" | "github" | "azure" | "apple" | "gitlab" | "bitbucket",
+  ) => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
       },
     });
     if (error) throw error;
@@ -117,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signUp,
         signInWithGoogle,
+        signInWithOAuth,
         logout,
         resetPassword,
         updateUserProfile,

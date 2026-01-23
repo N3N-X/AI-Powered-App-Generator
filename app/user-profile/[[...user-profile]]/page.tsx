@@ -30,8 +30,10 @@ export default function UserProfilePage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (user?.displayName) {
-      setDisplayName(user.displayName);
+    const name =
+      user?.user_metadata?.display_name || user?.user_metadata?.full_name || "";
+    if (name) {
+      setDisplayName(name);
     }
   }, [user]);
 
@@ -82,19 +84,23 @@ export default function UserProfilePage() {
           {/* Profile Picture */}
           <div className="flex items-center gap-4">
             <div className="h-20 w-20 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-2xl font-bold text-white">
-              {user.photoURL ? (
+              {user.user_metadata?.avatar_url ? (
                 <img
-                  src={user.photoURL}
+                  src={user.user_metadata.avatar_url}
                   alt="Profile"
                   className="h-full w-full rounded-full object-cover"
                 />
               ) : (
-                user.displayName?.[0] || user.email?.[0]?.toUpperCase()
+                user.user_metadata?.display_name?.[0] ||
+                user.user_metadata?.full_name?.[0] ||
+                user.email?.[0]?.toUpperCase()
               )}
             </div>
             <div>
               <h3 className="text-lg font-semibold text-white">
-                {user.displayName || "User"}
+                {user.user_metadata?.display_name ||
+                  user.user_metadata?.full_name ||
+                  "User"}
               </h3>
               <p className="text-sm text-slate-400">{user.email}</p>
             </div>
@@ -120,7 +126,13 @@ export default function UserProfilePage() {
 
             <Button
               type="submit"
-              disabled={isSaving || displayName === user.displayName}
+              disabled={
+                isSaving ||
+                displayName ===
+                  (user.user_metadata?.display_name ||
+                    user.user_metadata?.full_name ||
+                    "")
+              }
               className="w-full"
             >
               {isSaving ? (

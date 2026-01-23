@@ -437,7 +437,10 @@ export default function DocsPage() {
           <div className="flex items-center gap-3">
             {!loading && user && (
               <Badge variant="secondary" className="hidden md:flex">
-                Welcome, {user.displayName || user.email?.split("@")[0]}
+                Welcome,{" "}
+                {user.user_metadata?.display_name ||
+                  user.user_metadata?.full_name ||
+                  user.email?.split("@")[0]}
               </Badge>
             )}
             {!loading && !user && (

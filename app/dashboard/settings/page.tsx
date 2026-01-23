@@ -262,21 +262,24 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
                   <div className="h-20 w-20 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-2xl font-bold text-white">
-                    {authUser?.photoURL ? (
+                    {authUser?.user_metadata?.avatar_url ? (
                       <img
-                        src={authUser.photoURL}
+                        src={authUser.user_metadata.avatar_url}
                         alt="Profile"
                         className="h-full w-full rounded-full object-cover"
                       />
                     ) : (
                       user?.name?.[0] ||
-                      authUser?.displayName?.[0] ||
+                      authUser?.user_metadata?.display_name?.[0] ||
                       authUser?.email?.[0]?.toUpperCase()
                     )}
                   </div>
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-white">
-                      {user?.name || authUser?.displayName || "User"}
+                      {user?.name ||
+                        authUser?.user_metadata?.display_name ||
+                        authUser?.user_metadata?.full_name ||
+                        "User"}
                     </h3>
                     <p className="text-sm text-slate-400">{authUser?.email}</p>
                     <Badge

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
  * Add CORS headers to allow mobile app development
  * Only enabled in development mode
  */
-export function corsHeaders() {
+export function corsHeaders(): Record<string, string> {
   const isDev = process.env.NODE_ENV === "development";
 
   if (!isDev) {
@@ -24,9 +24,15 @@ export function corsHeaders() {
  * Handle OPTIONS preflight request
  */
 export function handleCorsOptions() {
+  const headers = new Headers();
+  const corsHdrs = corsHeaders();
+  Object.entries(corsHdrs).forEach(([key, value]) => {
+    headers.set(key, value);
+  });
+
   return new NextResponse(null, {
     status: 200,
-    headers: corsHeaders(),
+    headers,
   });
 }
 

@@ -56,10 +56,12 @@ export function LandingNavbar() {
   };
 
   const getUserInitials = () => {
-    if (user?.displayName) {
-      return user.displayName
+    const displayName =
+      user?.user_metadata?.display_name || user?.user_metadata?.full_name;
+    if (displayName) {
+      return displayName
         .split(" ")
-        .map((n) => n[0])
+        .map((n: string) => n[0])
         .join("")
         .toUpperCase()
         .slice(0, 2);
@@ -131,8 +133,12 @@ export function LandingNavbar() {
                     >
                       <Avatar className="h-9 w-9">
                         <AvatarImage
-                          src={user.photoURL || undefined}
-                          alt={user.displayName || "User"}
+                          src={user.user_metadata?.avatar_url || undefined}
+                          alt={
+                            user.user_metadata?.display_name ||
+                            user.user_metadata?.full_name ||
+                            "User"
+                          }
                         />
                         <AvatarFallback className="bg-gradient-to-br from-violet-600 to-indigo-600 text-white text-sm">
                           {getUserInitials()}
@@ -143,7 +149,9 @@ export function LandingNavbar() {
                   <DropdownMenuContent align="end" className="w-56">
                     <div className="px-2 py-1.5">
                       <p className="text-sm font-medium">
-                        {user.displayName || "User"}
+                        {user.user_metadata?.display_name ||
+                          user.user_metadata?.full_name ||
+                          "User"}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
                         {user.email}

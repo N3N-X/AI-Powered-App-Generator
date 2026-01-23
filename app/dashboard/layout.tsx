@@ -1,26 +1,19 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { DashboardLayoutClient } from "./layout-client";
-import { adminAuth } from "@/lib/firebase-admin";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Check for Firebase session cookie
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("__session")?.value;
+  const supabase = await createClient();
 
-  if (!sessionCookie) {
-    redirect("/sign-in");
-  }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // Verify the session cookie
-  try {
-    await adminAuth.verifySessionCookie(sessionCookie);
-  } catch (error) {
-    console.error("Invalid session:", error);
+  if (!user) {
     redirect("/sign-in");
   }
 
