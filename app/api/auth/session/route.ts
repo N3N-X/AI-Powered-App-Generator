@@ -1,10 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { cookies } from "next/headers";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // Create a session cookie from Firebase ID token
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: 10 requests per 15 minutes per IP
+    const rateLimitResult = await checkRateLimit(request, {
+      limit: 10,
+      window: 15 * 60 * 1000, // 15 minutes
+    });
+
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        {
+          error: "Too many authentication attempts. Please try again later.",
+          retryAfter: Math.ceil(rateLimitResult.reset / 1000),
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.ceil(rateLimitResult.reset / 1000)),
+            "X-RateLimit-Limit": String(10),
+            "X-RateLimit-Remaining": String(rateLimitResult.remaining),
+            "X-RateLimit-Reset": String(rateLimitResult.reset),
+          },
+        },
+      );
+    }
+
     const { idToken } = await request.json();
 
     if (!idToken) {

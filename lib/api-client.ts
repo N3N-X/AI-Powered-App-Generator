@@ -3,7 +3,7 @@
  * Handles both session cookies and Authorization headers
  */
 
-import { auth } from '@/lib/firebase';
+import { auth } from "@/lib/firebase";
 
 interface FetchOptions extends RequestInit {
   skipAuth?: boolean;
@@ -15,13 +15,13 @@ interface FetchOptions extends RequestInit {
  */
 export async function apiClient(
   url: string,
-  options: FetchOptions = {}
+  options: FetchOptions = {},
 ): Promise<Response> {
   const { skipAuth = false, headers = {}, ...restOptions } = options;
 
   // Prepare headers
   const requestHeaders: HeadersInit = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
     ...headers,
   };
 
@@ -29,9 +29,9 @@ export async function apiClient(
   if (!skipAuth && auth.currentUser) {
     try {
       const token = await auth.currentUser.getIdToken();
-      requestHeaders['Authorization'] = `Bearer ${token}`;
+      requestHeaders["Authorization"] = `Bearer ${token}`;
     } catch (error) {
-      console.error('Failed to get ID token:', error);
+      console.error("Failed to get ID token:", error);
     }
   }
 
@@ -47,29 +47,29 @@ export async function apiClient(
  */
 export const api = {
   get: (url: string, options?: FetchOptions) =>
-    apiClient(url, { ...options, method: 'GET' }),
+    apiClient(url, { ...options, method: "GET" }),
 
-  post: (url: string, data?: any, options?: FetchOptions) =>
+  post: (url: string, data?: unknown, options?: FetchOptions) =>
     apiClient(url, {
       ...options,
-      method: 'POST',
+      method: "POST",
       body: data ? JSON.stringify(data) : undefined,
     }),
 
-  patch: (url: string, data?: any, options?: FetchOptions) =>
+  patch: (url: string, data?: unknown, options?: FetchOptions) =>
     apiClient(url, {
       ...options,
-      method: 'PATCH',
+      method: "PATCH",
       body: data ? JSON.stringify(data) : undefined,
     }),
 
-  put: (url: string, data?: any, options?: FetchOptions) =>
+  put: (url: string, data?: unknown, options?: FetchOptions) =>
     apiClient(url, {
       ...options,
-      method: 'PUT',
+      method: "PUT",
       body: data ? JSON.stringify(data) : undefined,
     }),
 
   delete: (url: string, options?: FetchOptions) =>
-    apiClient(url, { ...options, method: 'DELETE' }),
+    apiClient(url, { ...options, method: "DELETE" }),
 };
