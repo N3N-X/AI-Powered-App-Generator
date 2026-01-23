@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/db";
@@ -162,8 +162,8 @@ const RevokeKeySchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
 
     // Verify user owns the project
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
       include: {
         projects: {
           where: { id: projectId },
@@ -242,8 +242,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -259,7 +259,7 @@ export async function GET(request: NextRequest) {
 
     // Verify user owns the project
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
       include: {
         projects: {
           where: { id: projectId },
@@ -299,8 +299,8 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -332,7 +332,9 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Key not found" }, { status: 404 });
     }
 
-    if (key.project.user.clerkId !== userId) {
+    // Verify ownership using Firebase UID
+    const ownerMatches = key.project.user.firebaseUid === uid;
+    if (!ownerMatches) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

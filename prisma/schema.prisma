@@ -40,7 +40,7 @@ enum BuildPlatform {
 
 model User {
   id                    String    @id @default(cuid())
-  clerkId               String    @unique
+  firebaseUid           String    @unique // Firebase UID
   email                 String    @unique
   name                  String?
   avatarUrl             String?
@@ -71,7 +71,7 @@ model User {
   promptHistory         PromptHistory[]
   tokenPurchases        TokenPurchase[]
 
-  @@index([clerkId])
+  @@index([firebaseUid])
   @@index([email])
   @@index([stripeCustomerId])
 }

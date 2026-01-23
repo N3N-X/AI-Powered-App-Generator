@@ -1,5 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 
 /**
@@ -18,16 +18,16 @@ import prisma from "@/lib/db";
  *       500:
  *         description: Failed to fetch statistics
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Check if user is admin
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
       select: { role: true },
     });
 

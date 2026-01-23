@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +31,7 @@ import { toast } from "@/hooks/use-toast";
 
 export default function GenerateStartPage() {
   const router = useRouter();
-  const { user: clerkUser } = useUser();
+  const { user: authUser, loading: authLoading } = useAuth();
   const { projects, setProjects, setCurrentProject } = useProjectStore();
   const { setUser, setConnectedServices } = useUserStore();
 
@@ -42,7 +42,7 @@ export default function GenerateStartPage() {
 
   useEffect(() => {
     async function fetchData() {
-      if (!clerkUser) return;
+      if (!authUser || authLoading) return;
 
       try {
         // Fetch user data
@@ -70,7 +70,7 @@ export default function GenerateStartPage() {
     }
 
     fetchData();
-  }, [clerkUser, setProjects, setUser, setConnectedServices]);
+  }, [authUser, authLoading, setProjects, setUser, setConnectedServices]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/db";
@@ -9,9 +8,10 @@ import {
 } from "@/lib/subdomain";
 import { generateApiKey } from "@/lib/proxy";
 import { ProxyService } from "@prisma/client";
+import { corsHeaders, handleCorsOptions, withCors } from "@/lib/cors";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
 
 // Default services for auto-generated API keys
-// Note: Only using enum values that exist in all environments
 const DEFAULT_PROJECT_SERVICES: ProxyService[] = [
   ProxyService.DATABASE,
   ProxyService.EMAIL,
@@ -28,54 +28,23 @@ const createProjectSchema = z.object({
   platform: z.enum(["WEB", "IOS", "ANDROID"]).default("WEB"),
 });
 
-/**
- * @swagger
- * /api/projects:
- *   get:
- *     summary: List user's projects
- *     description: Retrieves all projects belonging to the authenticated user, ordered by last updated.
- *     responses:
- *       200:
- *         description: Projects retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 projects:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                       name:
- *                         type: string
- *                       slug:
- *                         type: string
- *                       description:
- *                         type: string
- *                       githubRepo:
- *                         type: string
- *                       createdAt:
- *                         type: string
- *                       updatedAt:
- *                         type: string
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Failed to fetch projects
- */
-export async function GET() {
+// Handle CORS preflight
+export async function OPTIONS() {
+  return handleCorsOptions();
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
+      return withCors(
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      );
     }
 
     // Find user in database
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
       include: {
         projects: {
           orderBy: { updatedAt: "desc" },
@@ -101,88 +70,30 @@ export async function GET() {
       // Create user if doesn't exist
       const newUser = await prisma.user.create({
         data: {
-          clerkId: userId,
-          email: `${userId}@placeholder.com`, // Will be updated via webhook
+          firebaseUid: uid,
+          email: `${uid}@placeholder.com`, // Will be updated from Firebase
         },
         include: { projects: true },
       });
-      return NextResponse.json({ projects: newUser.projects });
+      return withCors(NextResponse.json({ projects: newUser.projects }));
     }
 
-    return NextResponse.json({ projects: user.projects });
+    return withCors(NextResponse.json({ projects: user.projects }));
   } catch (error) {
     console.error("Failed to fetch projects:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch projects" },
-      { status: 500 },
+    return withCors(
+      NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 }),
     );
   }
 }
 
-/**
- * @swagger
- * /api/projects:
- *   post:
- *     summary: Create a new project
- *     description: Creates a new project for the authenticated user with the provided name and optional description. Generates a unique slug and initializes with template code if specified.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *                 minLength: 1
- *                 maxLength: 100
- *                 description: Name of the project
- *               description:
- *                 type: string
- *                 maxLength: 500
- *                 description: Optional project description
- *               template:
- *                 type: string
- *                 description: Optional template to initialize the project
- *             required:
- *               - name
- *     responses:
- *       201:
- *         description: Project created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 project:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: string
- *                     name:
- *                       type: string
- *                     description:
- *                       type: string
- *                     slug:
- *                       type: string
- *                     codeFiles:
- *                       type: object
- *                     userId:
- *                       type: string
- *                     appConfig:
- *                       type: object
- *       400:
- *         description: Validation error
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Failed to create project
- */
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
+      return withCors(
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      );
     }
 
     const body = await request.json();
@@ -190,14 +101,14 @@ export async function POST(request: NextRequest) {
 
     // Find or create user
     let user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
     });
 
     if (!user) {
       user = await prisma.user.create({
         data: {
-          clerkId: userId,
-          email: `${userId}@placeholder.com`,
+          firebaseUid: uid,
+          email: `${uid}@placeholder.com`,
         },
       });
     }
@@ -267,30 +178,33 @@ export async function POST(request: NextRequest) {
       DEFAULT_PROJECT_SERVICES,
     );
 
-    return NextResponse.json(
-      {
-        project,
-        apiKey: {
-          key: rawKey,
-          keyPrefix,
-          services: DEFAULT_PROJECT_SERVICES,
-          warning: "Save this key securely - it will not be shown again!",
+    return withCors(
+      NextResponse.json(
+        {
+          project,
+          apiKey: {
+            key: rawKey,
+            keyPrefix,
+            services: DEFAULT_PROJECT_SERVICES,
+            warning: "Save this key securely - it will not be shown again!",
+          },
         },
-      },
-      { status: 201 },
+        { status: 201 },
+      ),
     );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Validation error", details: error.errors },
-        { status: 400 },
+      return withCors(
+        NextResponse.json(
+          { error: "Validation error", details: error.errors },
+          { status: 400 },
+        ),
       );
     }
 
     console.error("Failed to create project:", error);
-    return NextResponse.json(
-      { error: "Failed to create project" },
-      { status: 500 },
+    return withCors(
+      NextResponse.json({ error: "Failed to create project" }, { status: 500 }),
     );
   }
 }

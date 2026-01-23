@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,7 +41,7 @@ import {
 export default function SettingsPage() {
   const searchParams = useSearchParams();
   const defaultTab = searchParams.get("tab") || "account";
-  const { user: clerkUser } = useUser();
+  const { user: authUser, loading: authLoading } = useAuth();
   const { user, hasGitHub, setConnectedServices, updateUser } = useUserStore();
   const remainingCredits = useRemainingCredits();
 
@@ -96,9 +96,8 @@ export default function SettingsPage() {
   };
 
   const handleUpgrade = () => {
-    // Redirect to Clerk's user profile where they can manage subscriptions
-    // Clerk Billing automatically shows available plans in the billing section
-    window.location.href = "/user-profile";
+    // Redirect to billing portal or Stripe checkout
+    window.location.href = "/dashboard/settings?tab=billing";
   };
 
   const handleManageSubscription = async () => {
@@ -263,18 +262,23 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
                   <div className="h-20 w-20 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-2xl font-bold text-white">
-                    {user?.name?.[0] ||
-                      clerkUser?.firstName?.[0] ||
-                      clerkUser?.emailAddresses[0]?.emailAddress[0]?.toUpperCase()}
+                    {authUser?.photoURL ? (
+                      <img
+                        src={authUser.photoURL}
+                        alt="Profile"
+                        className="h-full w-full rounded-full object-cover"
+                      />
+                    ) : (
+                      user?.name?.[0] ||
+                      authUser?.displayName?.[0] ||
+                      authUser?.email?.[0]?.toUpperCase()
+                    )}
                   </div>
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-white">
-                      {user?.name ||
-                        `${clerkUser?.firstName || ""} ${clerkUser?.lastName || ""}`.trim()}
+                      {user?.name || authUser?.displayName || "User"}
                     </h3>
-                    <p className="text-sm text-slate-400">
-                      {clerkUser?.emailAddresses[0]?.emailAddress}
-                    </p>
+                    <p className="text-sm text-slate-400">{authUser?.email}</p>
                     <Badge
                       variant={
                         user?.plan === "ELITE"
@@ -319,12 +323,12 @@ export default function SettingsPage() {
                   <div className="space-y-2">
                     <Label>Email</Label>
                     <Input
-                      value={clerkUser?.emailAddresses[0]?.emailAddress || ""}
+                      value={authUser?.email || ""}
                       disabled
                       className="bg-white/5"
                     />
                     <p className="text-xs text-slate-500">
-                      Email is managed by your authentication provider
+                      Email cannot be changed at this time
                     </p>
                   </div>
                 </div>

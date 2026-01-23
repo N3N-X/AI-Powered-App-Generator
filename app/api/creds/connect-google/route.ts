@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/db";
@@ -56,8 +56,8 @@ import { GoogleCredentialSchema, PLAN_LIMITS, Plan } from "@/types";
  */
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     // Get user
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
     });
 
     if (!user) {
@@ -183,15 +183,15 @@ export async function POST(request: NextRequest) {
  *       500:
  *         description: Failed to check credentials
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
       include: {
         credentials: {
           where: { platform: "google" },
@@ -263,8 +263,8 @@ export async function GET() {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -279,7 +279,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
     });
 
     if (!user) {

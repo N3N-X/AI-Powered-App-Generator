@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { SignedIn, SignedOut, useUser } from "@clerk/nextjs";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -380,7 +380,7 @@ Step 6: "Add smooth scroll animations"
 
 export default function DocsPage() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user, loading } = useAuth();
   const [selectedArticle, setSelectedArticle] = useState("quick-start");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -402,7 +402,7 @@ export default function DocsPage() {
       <div className="border-b border-gray-200/50 dark:border-white/10 bg-white/80 dark:bg-black/30 backdrop-blur-xl p-4 shrink-0">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
-            <SignedOut>
+            {!loading && !user && (
               <Button
                 variant="outline"
                 size="sm"
@@ -413,8 +413,8 @@ export default function DocsPage() {
                 <span className="hidden sm:inline">Back to Home</span>
                 <span className="sm:hidden">Home</span>
               </Button>
-            </SignedOut>
-            <SignedIn>
+            )}
+            {!loading && user && (
               <Button
                 variant="outline"
                 size="sm"
@@ -425,7 +425,7 @@ export default function DocsPage() {
                 <span className="hidden sm:inline">Back to Dashboard</span>
                 <span className="sm:hidden">Dashboard</span>
               </Button>
-            </SignedIn>
+            )}
             <div className="flex items-center gap-2">
               <Book className="h-5 w-5 text-violet-500" />
               <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -435,16 +435,12 @@ export default function DocsPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <SignedIn>
-              {user && (
-                <Badge variant="secondary" className="hidden md:flex">
-                  Welcome,{" "}
-                  {user.firstName ||
-                    user.emailAddresses[0]?.emailAddress.split("@")[0]}
-                </Badge>
-              )}
-            </SignedIn>
-            <SignedOut>
+            {!loading && user && (
+              <Badge variant="secondary" className="hidden md:flex">
+                Welcome, {user.displayName || user.email?.split("@")[0]}
+              </Badge>
+            )}
+            {!loading && !user && (
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -462,7 +458,7 @@ export default function DocsPage() {
                   Get Started
                 </Button>
               </div>
-            </SignedOut>
+            )}
           </div>
         </div>
       </div>

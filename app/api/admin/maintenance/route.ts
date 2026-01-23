@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { writeFileSync, readFileSync } from "fs";
@@ -31,14 +31,14 @@ import { join } from "path";
  */
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Check if user is admin
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
       select: { role: true },
     });
 
@@ -107,16 +107,16 @@ export async function POST(request: NextRequest) {
  *       403:
  *         description: Admin access required
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Check if user is admin
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
       select: { role: true },
     });
 

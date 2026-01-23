@@ -1,32 +1,47 @@
-import { auth } from "@clerk/nextjs/server";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
+import { corsHeaders, handleCorsOptions, withCors } from "@/lib/cors";
+import { randomBytes } from "crypto";
+import { io } from "socket.io-client";
+
+// Handle CORS preflight
+export async function OPTIONS() {
+  return handleCorsOptions();
+}
 
 /**
- * Create a Snack session on Expo's servers
- * This avoids URL length issues by uploading files server-side
+ * Create a Snack session for the RUX runtime
+ * Publishes code to SnackPub so the runtime can receive it
  */
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
+      return withCors(
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      );
     }
 
     let body;
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+      return withCors(
+        NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }),
+      );
     }
 
     const { files, dependencies, name, description } = body;
 
     if (!files || typeof files !== "object") {
-      return NextResponse.json({ error: "Invalid files" }, { status: 400 });
+      return withCors(
+        NextResponse.json({ error: "Invalid files" }, { status: 400 }),
+      );
     }
 
     // Validate files structure
-    const sanitizedFiles: Record<string, { contents: string }> = {};
+    const sanitizedFiles: Record<string, { contents: string; type: string }> =
+      {};
     for (const [path, content] of Object.entries(files)) {
       if (typeof path !== "string" || path.length === 0) continue;
 
@@ -41,18 +56,23 @@ export async function POST(request: NextRequest) {
       if (typeof fileContent === "string") {
         // Sanitize file path to prevent path traversal
         const safePath = path.replace(/\.\./g, "").replace(/^\/+/, "");
-        sanitizedFiles[safePath] = { contents: fileContent };
+        sanitizedFiles[safePath] = {
+          type: "CODE",
+          contents: fileContent,
+        };
       }
     }
 
     if (Object.keys(sanitizedFiles).length === 0) {
-      return NextResponse.json(
-        { error: "No valid files provided" },
-        { status: 400 },
+      return withCors(
+        NextResponse.json(
+          { error: "No valid files provided" },
+          { status: 400 },
+        ),
       );
     }
 
-    // Sanitize dependencies
+    // Prepare dependencies
     const sanitizedDependencies: Record<string, string> = {
       expo: "~52.0.0",
       react: "18.3.1",
@@ -80,60 +100,93 @@ export async function POST(request: NextRequest) {
         ? description.slice(0, 500).replace(/[<>]/g, "")
         : "Built with RUX";
 
-    // Create Snack session via Expo API
-    const response = await fetch("https://snack.expo.dev/--/api/v2/snack", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: safeName,
-        description: safeDescription,
-        files: sanitizedFiles,
+    // Generate a unique channel ID for this session
+    const channel = randomBytes(16).toString("hex");
+
+    console.log("[Snack] Creating session:", {
+      name: safeName,
+      channel,
+      fileCount: Object.keys(sanitizedFiles).length,
+    });
+
+    // Connect to SnackPub and publish the code
+    const snackPubUrl = "https://snackpub.expo.dev";
+    const socket = io(snackPubUrl, {
+      transports: ["websocket", "polling"],
+    });
+
+    // Wait for connection
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        socket.disconnect();
+        reject(new Error("SnackPub connection timeout"));
+      }, 10000);
+
+      socket.on("connect", () => {
+        console.log("[Snack] Connected to SnackPub");
+        clearTimeout(timeout);
+        resolve();
+      });
+
+      socket.on("connect_error", (err) => {
+        console.error("[Snack] SnackPub connection error:", err);
+        clearTimeout(timeout);
+        reject(err);
+      });
+    });
+
+    // Subscribe to the channel
+    socket.emit("subscribe", { channel });
+
+    // Publish the code to the channel
+    socket.emit("message", {
+      channel,
+      message: {
+        type: "CODE",
+        diff: {
+          added: sanitizedFiles,
+          removed: [],
+          modified: [],
+        },
+        s3url: {},
         dependencies: sanitizedDependencies,
         sdkVersion: "52.0.0",
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "Unknown error");
-      console.error("Snack API error:", response.status, errorText);
-      return NextResponse.json(
-        { error: "Failed to create Snack session", details: errorText },
-        { status: response.status >= 500 ? 502 : response.status },
-      );
-    }
-
-    let data;
-    try {
-      data = await response.json();
-    } catch {
-      return NextResponse.json(
-        { error: "Invalid response from Snack API" },
-        { status: 502 },
-      );
-    }
-
-    if (!data.id) {
-      return NextResponse.json(
-        { error: "No Snack ID returned" },
-        { status: 502 },
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      snackId: data.id,
-      url: `https://snack.expo.dev/@snack/${data.id}`,
-    });
-  } catch (error) {
-    console.error("Snack session creation error:", error);
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to create session",
       },
-      { status: 500 },
+    });
+
+    console.log("[Snack] Published code to channel:", channel);
+
+    // Keep the connection open for a bit to ensure delivery
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    socket.disconnect();
+
+    // Create the runtime URL
+    const runtimeUrl = new URL("https://run.rux.sh");
+    runtimeUrl.searchParams.set("runtime-version", "exposdk:52.0.0");
+    runtimeUrl.searchParams.set("snack-channel", channel);
+
+    return withCors(
+      NextResponse.json({
+        success: true,
+        channel,
+        url: runtimeUrl.toString(),
+        files: sanitizedFiles,
+        dependencies: sanitizedDependencies,
+        name: safeName,
+        description: safeDescription,
+      }),
+    );
+  } catch (error) {
+    console.error("[Snack] Creation error:", error);
+    return withCors(
+      NextResponse.json(
+        {
+          error:
+            error instanceof Error ? error.message : "Failed to create session",
+          details: error instanceof Error ? error.stack : undefined,
+        },
+        { status: 500 },
+      ),
     );
   }
 }

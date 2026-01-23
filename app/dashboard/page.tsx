@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +24,7 @@ import {
 
 export default function DashboardOverview() {
   const router = useRouter();
-  const { user: clerkUser } = useUser();
+  const { user: authUser, loading: authLoading } = useAuth();
   const { projects, setProjects, setCurrentProject } = useProjectStore();
   const { user, setUser, setConnectedServices } = useUserStore();
   const { openModal } = useUIStore();
@@ -55,10 +55,10 @@ export default function DashboardOverview() {
       }
     }
 
-    if (clerkUser) {
+    if (!authLoading && authUser) {
       fetchData();
     }
-  }, [clerkUser, setProjects, setUser, setConnectedServices]);
+  }, [authUser, authLoading, setProjects, setUser, setConnectedServices]);
 
   // Recent projects (last 6)
   const recentProjects = projects

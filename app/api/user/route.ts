@@ -1,8 +1,9 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/db";
 import { PLAN_LIMITS, Plan } from "@/types";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
+import { adminAuth } from "@/lib/firebase-admin";
 
 /**
  * @swagger
@@ -23,7 +24,7 @@ import { PLAN_LIMITS, Plan } from "@/types";
  *                   properties:
  *                     id:
  *                       type: string
- *                     clerkId:
+ *                     firebaseUid:
  *                       type: string
  *                     email:
  *                       type: string
@@ -50,40 +51,43 @@ import { PLAN_LIMITS, Plan } from "@/types";
  *       500:
  *         description: Failed to fetch user
  */
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid, email } = await getAuthenticatedUser(request);
+
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Get user from database
     let user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
     });
 
     // If user doesn't exist in database, create them
     if (!user) {
-      const clerkUser = await currentUser();
+      try {
+        const firebaseUser = await adminAuth.getUser(uid);
 
-      if (!clerkUser) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 });
+        user = await prisma.user.create({
+          data: {
+            firebaseUid: uid,
+            email: firebaseUser.email || email || "",
+            name: firebaseUser.displayName || null,
+            avatarUrl: firebaseUser.photoURL || null,
+            plan: "FREE",
+            role: "USER",
+            credits: PLAN_LIMITS.FREE.monthlyCredits, // 3000 for free tier
+            totalCreditsUsed: 0,
+          },
+        });
+      } catch (error) {
+        console.error("Error creating user:", error);
+        return NextResponse.json(
+          { error: "Failed to create user" },
+          { status: 500 },
+        );
       }
-
-      user = await prisma.user.create({
-        data: {
-          clerkId: userId,
-          email: clerkUser.emailAddresses[0]?.emailAddress || "",
-          name: clerkUser.firstName
-            ? `${clerkUser.firstName} ${clerkUser.lastName || ""}`.trim()
-            : null,
-          avatarUrl: clerkUser.imageUrl,
-          plan: "FREE",
-          role: "USER",
-          credits: PLAN_LIMITS.FREE.monthlyCredits, // 3000 for free tier
-          totalCreditsUsed: 0,
-        },
-      });
     }
 
     // Check if we need to reset credits for paid plans (monthly reset)
@@ -112,7 +116,7 @@ export async function GET(_request: NextRequest) {
     return NextResponse.json({
       user: {
         id: user.id,
-        clerkId: user.clerkId,
+        firebaseUid: user.firebaseUid,
         email: user.email,
         name: user.name,
         avatarUrl: user.avatarUrl,
@@ -168,8 +172,9 @@ const UpdateUserSchema = z.object({
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -177,7 +182,9 @@ export async function PATCH(request: NextRequest) {
     const data = UpdateUserSchema.parse(body);
 
     const user = await prisma.user.update({
-      where: { clerkId: userId },
+      where: {
+        firebaseUid: uid,
+      },
       data: {
         ...(data.name && { name: data.name }),
         updatedAt: new Date(),

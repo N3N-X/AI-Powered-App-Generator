@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { UserButton } from "@clerk/nextjs";
+import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,8 @@ import {
   Moon,
   Monitor,
   Globe,
+  User as UserIcon,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -51,6 +53,7 @@ import { DomainSettings } from "./domain-settings";
 export function Topbar() {
   const router = useRouter();
   const pathname = usePathname();
+  const { user: authUser, loading: authLoading, logout } = useAuth();
   const {
     currentProject,
     isGenerating,
@@ -569,15 +572,70 @@ export function Topbar() {
             <TooltipContent>Settings</TooltipContent>
           </Tooltip>
 
-          {/* User button */}
-          <UserButton
-            afterSignOutUrl="/"
-            appearance={{
-              elements: {
-                avatarBox: "h-8 w-8",
-              },
-            }}
-          />
+          {/* User Menu */}
+          {!authLoading && authUser && (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                    >
+                      <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white">
+                        {authUser.photoURL ? (
+                          <img
+                            src={authUser.photoURL}
+                            alt="Profile"
+                            className="h-full w-full rounded-full object-cover"
+                          />
+                        ) : (
+                          authUser.displayName?.[0] ||
+                          authUser.email?.[0]?.toUpperCase()
+                        )}
+                      </div>
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Account</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">
+                      {authUser.displayName || "User"}
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-slate-400">
+                      {authUser.email}
+                    </span>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push("/user-profile")}>
+                  <UserIcon className="h-4 w-4 mr-2" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => router.push("/dashboard/settings")}
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={async () => {
+                    await logout();
+                    router.push("/");
+                  }}
+                  className="text-red-600 dark:text-red-400"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </header>
 

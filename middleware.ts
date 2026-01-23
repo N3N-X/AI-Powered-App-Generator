@@ -1,55 +1,72 @@
-import {
-  clerkMiddleware,
-  createRouteMatcher,
-  clerkClient,
-} from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 // Admin emails that can bypass maintenance mode
-// Add admin emails here (can also be set via ADMIN_EMAILS env var)
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "nick@rux.sh")
   .split(",")
   .map((e) => e.trim().toLowerCase());
 
 // Define public routes that don't require authentication
-const isPublicRoute = createRouteMatcher([
+const publicRoutes = [
   "/",
   "/pricing",
   "/features",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/user-profile(.*)", // Clerk user profile (handles billing)
-  "/api/webhooks(.*)",
+  "/sign-in",
+  "/sign-up",
+  "/forgot-password",
+  "/api/webhooks",
   "/api/health",
-  "/api/proxy/(.*)", // Proxy endpoints use their own API key auth
-  "/api/serve(.*)", // Public serving of deployed web apps
-  "/docs(.*)", // Documentation pages
-  "/privacy", // Privacy Policy
-  "/terms", // Terms of Service
-  "/cookies", // Cookie Policy
-  "/about", // About page
-  "/contact", // Contact page
-  "/maintenance", // Maintenance page itself
-]);
-
-// Define API routes that need special handling
-const isApiRoute = createRouteMatcher(["/api/(.*)"]);
+  "/api/proxy",
+  "/api/serve",
+  "/docs",
+  "/privacy",
+  "/terms",
+  "/cookies",
+  "/about",
+  "/contact",
+  "/maintenance",
+];
 
 // Define protected routes that require specific plans
-const isProRoute = createRouteMatcher(["/api/github/(.*)", "/api/build/(.*)"]);
+const proRoutes = ["/api/github", "/api/build"];
+const eliteRoutes: string[] = [];
 
-const isEliteRoute = createRouteMatcher([
-  // Routes that require Elite plan
-]);
+function isPublicRoute(pathname: string): boolean {
+  return publicRoutes.some((route) => pathname.startsWith(route));
+}
 
-export default clerkMiddleware(async (auth, req) => {
-  const { userId, sessionClaims } = await auth();
+function isProRoute(pathname: string): boolean {
+  return proRoutes.some((route) => pathname.startsWith(route));
+}
+
+function isEliteRoute(pathname: string): boolean {
+  return eliteRoutes.some((route) => pathname.startsWith(route));
+}
+
+function isApiRoute(pathname: string): boolean {
+  return pathname.startsWith("/api/");
+}
+
+export async function middleware(req: NextRequest) {
+  // Handle CORS preflight requests in development
+  if (req.method === "OPTIONS" && process.env.NODE_ENV === "development") {
+    return new NextResponse(null, {
+      status: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods":
+          "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Max-Age": "86400",
+      },
+    });
+  }
 
   // Handle subdomain routing for user projects (*.rux.sh)
   const hostname = req.headers.get("host") || "";
   const subdomain = hostname.split(".")[0];
 
-  // Check if it's a user subdomain (not www, not api, not staging, not the main domain)
+  // Check if it's a user subdomain
   const isSubdomain =
     hostname.includes(".rux.sh") &&
     subdomain !== "www" &&
@@ -77,32 +94,28 @@ export default clerkMiddleware(async (auth, req) => {
     if (
       req.nextUrl.pathname.startsWith("/sign-in") ||
       req.nextUrl.pathname.startsWith("/sign-up") ||
-      req.nextUrl.pathname.startsWith("/api/webhooks") ||
-      req.nextUrl.pathname.startsWith("/api/clerk")
+      req.nextUrl.pathname.startsWith("/api/webhooks")
     ) {
       return NextResponse.next();
     }
 
-    // Check if user is admin by fetching email from Clerk
+    // Check if user is admin - for Firebase we'll check the session cookie
+    const sessionCookie = req.cookies.get("__session")?.value;
     let isAdmin = false;
 
-    if (userId) {
+    if (sessionCookie) {
       try {
-        const client = await clerkClient();
-        const user = await client.users.getUser(userId);
-        const userEmail =
-          user.emailAddresses
-            .find((e) => e.id === user.primaryEmailAddressId)
-            ?.emailAddress?.toLowerCase() || "";
+        // We'll verify admin status in the API routes
+        // For now, just check if they have a session
+        // The API routes will handle the actual Firebase token verification
+        const { adminAuth } = await import("@/lib/firebase-admin");
+        const decodedToken = await adminAuth.verifySessionCookie(sessionCookie);
 
-        isAdmin = userEmail ? ADMIN_EMAILS.includes(userEmail) : false;
-
-        // Debug in development
-        console.log("[Maintenance] userId:", userId);
-        console.log("[Maintenance] userEmail:", userEmail);
-        console.log("[Maintenance] isAdmin:", isAdmin);
+        // Check if user email is in admin list
+        const userEmail = decodedToken.email?.toLowerCase() || "";
+        isAdmin = ADMIN_EMAILS.includes(userEmail);
       } catch (error) {
-        console.error("[Maintenance] Error fetching user:", error);
+        console.error("[Maintenance] Error verifying session:", error);
       }
     }
 
@@ -113,14 +126,17 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   // Allow public routes
-  if (isPublicRoute(req)) {
+  if (isPublicRoute(req.nextUrl.pathname)) {
     return NextResponse.next();
   }
 
-  // Check authentication for protected routes
-  if (!userId) {
+  // For protected routes, check for session cookie
+  const sessionCookie = req.cookies.get("__session")?.value;
+
+  // If no session cookie, handle unauthorized
+  if (!sessionCookie) {
     // For API routes, return 401
-    if (isApiRoute(req)) {
+    if (isApiRoute(req.nextUrl.pathname)) {
       return NextResponse.json(
         { error: "Unauthorized", code: "UNAUTHORIZED" },
         { status: 401 },
@@ -132,59 +148,47 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.redirect(signInUrl);
   }
 
-  // Get user's plan from Clerk public metadata
-  const userPlan =
-    (sessionClaims?.public_metadata as { plan?: string })?.plan || "FREE";
+  // For API routes, verify the Firebase token and add user info to headers
+  if (isApiRoute(req.nextUrl.pathname)) {
+    try {
+      const { adminAuth } = await import("@/lib/firebase-admin");
+      const decodedToken = await adminAuth.verifySessionCookie(sessionCookie);
+      const userId = decodedToken.uid;
 
-  // Check Pro route access
-  if (isProRoute(req) && userPlan === "FREE") {
-    if (isApiRoute(req)) {
-      return NextResponse.json(
-        {
-          error: "This feature requires a Pro or Elite plan",
-          code: "PLAN_LIMIT_EXCEEDED",
+      // Get user's plan from Firestore or database
+      // For now, we'll fetch from the database in the API route
+      // This middleware just passes the Firebase UID
+      const requestHeaders = new Headers(req.headers);
+      requestHeaders.set("x-user-id", userId);
+      requestHeaders.set("x-firebase-uid", userId);
+
+      // If we have the email, add it too
+      if (decodedToken.email) {
+        requestHeaders.set("x-user-email", decodedToken.email);
+      }
+
+      return NextResponse.next({
+        request: {
+          headers: requestHeaders,
         },
-        { status: 403 },
+      });
+    } catch (error) {
+      console.error("[Middleware] Error verifying Firebase token:", error);
+      return NextResponse.json(
+        { error: "Invalid session", code: "INVALID_SESSION" },
+        { status: 401 },
       );
     }
-    return NextResponse.redirect(new URL("/pricing", req.url));
-  }
-
-  // Check Elite route access
-  if (isEliteRoute(req) && userPlan !== "ELITE") {
-    if (isApiRoute(req)) {
-      return NextResponse.json(
-        {
-          error: "This feature requires an Elite plan",
-          code: "PLAN_LIMIT_EXCEEDED",
-        },
-        { status: 403 },
-      );
-    }
-    return NextResponse.redirect(new URL("/pricing", req.url));
-  }
-
-  // Add user info to headers for API routes
-  if (isApiRoute(req)) {
-    const requestHeaders = new Headers(req.headers);
-    requestHeaders.set("x-user-id", userId);
-    requestHeaders.set("x-user-plan", userPlan);
-
-    return NextResponse.next({
-      request: {
-        headers: requestHeaders,
-      },
-    });
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and static files
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // Skip Next.js internals and static files, but include all other routes
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)).*)",
     // Always run for API routes
-    "/(api|trpc)(.*)",
+    "/api/:path*",
   ],
 };

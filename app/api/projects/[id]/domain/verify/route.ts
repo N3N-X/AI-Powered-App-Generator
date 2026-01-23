@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import dns from "dns";
@@ -16,18 +16,18 @@ const resolveCname = promisify(dns.resolveCname);
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id } = await params;
 
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { firebaseUid: uid },
     });
 
     if (!user) {
@@ -48,7 +48,7 @@ export async function POST(
     if (!project.customDomain) {
       return NextResponse.json(
         { error: "No custom domain configured" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -71,11 +71,11 @@ export async function POST(
       const txtRecords = await resolveTxt(`_rux.${domain}`);
       const flatRecords = txtRecords.flat();
       txtVerified = flatRecords.some((record) =>
-        record.includes(expectedTxtRecord)
+        record.includes(expectedTxtRecord),
       );
       if (!txtVerified) {
         errors.push(
-          `TXT record found but doesn't match. Expected: ${expectedTxtRecord}`
+          `TXT record found but doesn't match. Expected: ${expectedTxtRecord}`,
         );
       }
     } catch (error: unknown) {
@@ -83,7 +83,9 @@ export async function POST(
       if (dnsError.code === "ENODATA" || dnsError.code === "ENOTFOUND") {
         errors.push(`TXT record not found at _rux.${domain}`);
       } else {
-        errors.push(`Failed to query TXT record: ${dnsError.code || "unknown error"}`);
+        errors.push(
+          `Failed to query TXT record: ${dnsError.code || "unknown error"}`,
+        );
       }
     }
 
@@ -91,11 +93,11 @@ export async function POST(
     try {
       const cnameRecords = await resolveCname(domain);
       cnameVerified = cnameRecords.some(
-        (record) => record.toLowerCase() === "cname.rux.sh"
+        (record) => record.toLowerCase() === "cname.rux.sh",
       );
       if (!cnameVerified) {
         errors.push(
-          `CNAME record found but points to wrong target. Expected: cname.rux.sh, Got: ${cnameRecords[0]}`
+          `CNAME record found but points to wrong target. Expected: cname.rux.sh, Got: ${cnameRecords[0]}`,
         );
       }
     } catch (error: unknown) {
@@ -103,7 +105,9 @@ export async function POST(
       if (dnsError.code === "ENODATA" || dnsError.code === "ENOTFOUND") {
         errors.push(`CNAME record not found for ${domain}`);
       } else {
-        errors.push(`Failed to query CNAME record: ${dnsError.code || "unknown error"}`);
+        errors.push(
+          `Failed to query CNAME record: ${dnsError.code || "unknown error"}`,
+        );
       }
     }
 
@@ -151,7 +155,7 @@ export async function POST(
     console.error("Failed to verify domain:", error);
     return NextResponse.json(
       { error: "Failed to verify domain" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

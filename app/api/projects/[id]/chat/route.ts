@@ -1,14 +1,14 @@
-import { auth } from "@clerk/nextjs/server";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 
 // Save chat history
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const { uid } = await getAuthenticatedUser(request);
+  if (!uid) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -18,9 +18,18 @@ export async function POST(
     const body = await request.json();
     const { messages } = body;
 
+    // Get user
+    const user = await prisma.user.findUnique({
+      where: { firebaseUid: uid },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
     // Verify project ownership
     const project = await prisma.project.findFirst({
-      where: { id, userId },
+      where: { id, userId: user.id },
     });
 
     if (!project) {
@@ -38,7 +47,7 @@ export async function POST(
     console.error("Failed to save chat history:", error);
     return NextResponse.json(
       { error: "Failed to save chat history" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -46,19 +55,28 @@ export async function POST(
 // Clear chat history
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { userId } = await auth();
-  if (!userId) {
+  const { uid } = await getAuthenticatedUser(request);
+  if (!uid) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await params;
 
   try {
+    // Get user
+    const user = await prisma.user.findUnique({
+      where: { firebaseUid: uid },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
     // Verify project ownership
     const project = await prisma.project.findFirst({
-      where: { id, userId },
+      where: { id, userId: user.id },
     });
 
     if (!project) {
@@ -76,7 +94,7 @@ export async function DELETE(
     console.error("Failed to clear chat history:", error);
     return NextResponse.json(
       { error: "Failed to clear chat history" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
