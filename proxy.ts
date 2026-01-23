@@ -31,7 +31,7 @@ function isApiRoute(pathname: string): boolean {
   return pathname.startsWith("/api/");
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   // Handle CORS preflight requests in development
   if (req.method === "OPTIONS" && process.env.NODE_ENV === "development") {
     return new NextResponse(null, {
