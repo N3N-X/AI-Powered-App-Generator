@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth } from '@/lib/firebase-admin';
-import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from "next/server";
+import { adminAuth } from "@/lib/firebase-admin";
+import { cookies } from "next/headers";
 
 // Create a session cookie from Firebase ID token
 export async function POST(request: NextRequest) {
@@ -9,8 +9,8 @@ export async function POST(request: NextRequest) {
 
     if (!idToken) {
       return NextResponse.json(
-        { error: 'ID token is required' },
-        { status: 400 }
+        { error: "ID token is required" },
+        { status: 400 },
       );
     }
 
@@ -25,12 +25,12 @@ export async function POST(request: NextRequest) {
 
     // Set the cookie
     const cookieStore = await cookies();
-    cookieStore.set('__session', sessionCookie, {
+    cookieStore.set("__session", sessionCookie, {
       maxAge: expiresIn / 1000, // Convert to seconds
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      sameSite: 'lax',
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      sameSite: "lax",
     });
 
     return NextResponse.json({
@@ -38,11 +38,16 @@ export async function POST(request: NextRequest) {
       uid: decodedToken.uid,
       email: decodedToken.email,
     });
-  } catch (error) {
-    console.error('Error creating session cookie:', error);
+  } catch (error: any) {
+    console.error("Error creating session cookie:", error);
+    console.error("Error details:", {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
+    });
     return NextResponse.json(
-      { error: 'Failed to create session' },
-      { status: 401 }
+      { error: "Failed to create session", details: error.message },
+      { status: 401 },
     );
   }
 }
@@ -51,14 +56,14 @@ export async function POST(request: NextRequest) {
 export async function DELETE() {
   try {
     const cookieStore = await cookies();
-    cookieStore.delete('__session');
+    cookieStore.delete("__session");
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error clearing session:', error);
+    console.error("Error clearing session:", error);
     return NextResponse.json(
-      { error: 'Failed to clear session' },
-      { status: 500 }
+      { error: "Failed to clear session" },
+      { status: 500 },
     );
   }
 }

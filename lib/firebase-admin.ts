@@ -1,5 +1,5 @@
-import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
-import { getAuth, Auth } from 'firebase-admin/auth';
+import { initializeApp, getApps, cert, App } from "firebase-admin/app";
+import { getAuth, Auth } from "firebase-admin/auth";
 
 let app: App;
 let adminAuth: Auth;
@@ -11,21 +11,25 @@ if (getApps().length === 0) {
   const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
 
   if (!privateKey || !clientEmail || !projectId) {
-    console.warn(
-      'Firebase Admin SDK credentials not found. Please set FIREBASE_ADMIN_PRIVATE_KEY, FIREBASE_ADMIN_CLIENT_EMAIL, and FIREBASE_ADMIN_PROJECT_ID in .env.local'
-    );
-    // Initialize with minimal config for development
-    app = initializeApp({
-      projectId: projectId || 'rux-sh-d4cf3',
+    console.error("Firebase Admin SDK credentials not found!", {
+      hasPrivateKey: !!privateKey,
+      hasClientEmail: !!clientEmail,
+      hasProjectId: !!projectId,
     });
+    throw new Error("Firebase Admin SDK credentials are required");
   } else {
+    console.log(
+      "Initializing Firebase Admin SDK with credentials for project:",
+      projectId,
+    );
     app = initializeApp({
       credential: cert({
         projectId,
         clientEmail,
-        privateKey: privateKey.replace(/\\n/g, '\n'),
+        privateKey: privateKey.replace(/\\n/g, "\n"),
       }),
     });
+    console.log("Firebase Admin SDK initialized successfully");
   }
 
   adminAuth = getAuth(app);
