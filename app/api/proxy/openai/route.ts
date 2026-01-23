@@ -16,7 +16,7 @@ export async function OPTIONS() {
   return proxyCorsOptions();
 }
 import { AIProxyRequestSchema } from "@/types/proxy";
-import { ProxyService } from "@prisma/client";
+import type { ProxyService } from "@/lib/supabase/types";
 
 /**
  * @swagger
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, ProxyService.OPENAI)) {
+  if (!hasServiceAccess(services, "OPENAI)) {
     return proxyError(
       "This API key does not have access to the OpenAI service",
       "FORBIDDEN",
@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
         apiKeyId,
         projectId,
         userId,
-        service: ProxyService.OPENAI,
+        service: "OPENAI,
         operation: "chat.completions",
         creditsUsed: 0,
         success: false,
@@ -260,7 +260,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.OPENAI,
+      service: "OPENAI,
       operation: "chat.completions",
       creditsUsed: actualUnits * 10, // 10 credits per 1K tokens
       success: true,
@@ -283,7 +283,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.OPENAI,
+      service: "OPENAI,
       operation: "chat.completions",
       creditsUsed: 0,
       success: false,

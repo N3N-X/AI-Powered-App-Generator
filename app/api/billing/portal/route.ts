@@ -1,7 +1,7 @@
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, isStripeConfigured } from "@/lib/billing";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * @swagger

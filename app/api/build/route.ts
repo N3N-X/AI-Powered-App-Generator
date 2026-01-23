@@ -2,7 +2,7 @@ import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import archiver from "archiver";
 import FormData from "form-data";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 import {
   getDefaultAppJson,
   getDefaultPackageJson,

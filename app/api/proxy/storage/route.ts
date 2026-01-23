@@ -17,8 +17,8 @@ import {
   StorageUploadRequestSchema,
   StorageListRequestSchema,
 } from "@/types/proxy";
-import { ProxyService } from "@prisma/client";
-import prisma from "@/lib/db";
+import type { ProxyService } from "@/lib/supabase/types";
+import { createClient } from "@/lib/supabase/server";
 import { randomBytes } from "crypto";
 
 /**
@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, ProxyService.STORAGE)) {
+  if (!hasServiceAccess(services, "STORAGE)) {
     return proxyError(
       "This API key does not have access to the Storage service",
       "FORBIDDEN",
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
     apiKeyId,
     projectId,
     userId,
-    service: ProxyService.STORAGE,
+    service: "STORAGE,
     operation: "upload.request",
     creditsUsed: 0, // Credits charged on actual upload
     success: true,
@@ -335,7 +335,7 @@ export async function GET(request: NextRequest) {
   const { projectId, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, ProxyService.STORAGE)) {
+  if (!hasServiceAccess(services, "STORAGE)) {
     return proxyError(
       "This API key does not have access to the Storage service",
       "FORBIDDEN",
@@ -421,7 +421,7 @@ export async function DELETE(request: NextRequest) {
   const { apiKeyId, projectId, userId, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, ProxyService.STORAGE)) {
+  if (!hasServiceAccess(services, "STORAGE)) {
     return proxyError(
       "This API key does not have access to the Storage service",
       "FORBIDDEN",
@@ -464,7 +464,7 @@ export async function DELETE(request: NextRequest) {
     apiKeyId,
     projectId,
     userId,
-    service: ProxyService.STORAGE,
+    service: "STORAGE,
     operation: "delete",
     creditsUsed: 0,
     success: true,

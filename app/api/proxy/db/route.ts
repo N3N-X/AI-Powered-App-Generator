@@ -17,7 +17,7 @@ export async function OPTIONS() {
 }
 import { DatabaseProxyRequestSchema } from "@/types/proxy";
 import { ProxyService, Prisma } from "@prisma/client";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * @swagger
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, ProxyService.DATABASE)) {
+  if (!hasServiceAccess(services, "DATABASE)) {
     return proxyError(
       "This API key does not have access to the Database service",
       "FORBIDDEN",
@@ -350,7 +350,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.DATABASE,
+      service: "DATABASE,
       operation,
       creditsUsed: 1,
       success: true,
@@ -374,7 +374,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.DATABASE,
+      service: "DATABASE,
       operation,
       creditsUsed: 0,
       success: false,

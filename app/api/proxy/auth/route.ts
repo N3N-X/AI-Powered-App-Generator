@@ -19,7 +19,7 @@ export async function OPTIONS() {
 }
 import { AppAuthProxyRequestSchema } from "@/types/proxy";
 import { ProxyService, Prisma } from "@prisma/client";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 
 // Session token validity: 30 days
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, ProxyService.APP_AUTH)) {
+  if (!hasServiceAccess(services, "APP_AUTH)) {
     return proxyError(
       "This API key does not have access to the App Auth service",
       "FORBIDDEN",
@@ -508,7 +508,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.APP_AUTH,
+      service: "APP_AUTH,
       operation: requestData.operation,
       creditsUsed: 1,
       success: true,
@@ -528,7 +528,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.APP_AUTH,
+      service: "APP_AUTH,
       operation: requestData.operation,
       creditsUsed: 0,
       success: false,

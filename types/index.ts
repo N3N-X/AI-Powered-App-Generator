@@ -1,11 +1,18 @@
 import { z } from "zod";
+import type {
+  Plan as PlanType,
+  ProxyService as ProxyServiceType,
+} from "@/lib/supabase/types";
+
+// Re-export Supabase types
+export type Plan = PlanType;
+export type ProxyService = ProxyServiceType;
 
 // ============================================
 // Enums
 // ============================================
 
 export const PlanEnum = z.enum(["FREE", "PRO", "ELITE"]);
-export type Plan = z.infer<typeof PlanEnum>;
 
 export const BuildStatusEnum = z.enum([
   "PENDING",
@@ -23,34 +30,14 @@ export type BuildPlatform = z.infer<typeof BuildPlatformEnum>;
 export const AIModelEnum = z.enum(["grok", "claude"]);
 export type AIModel = z.infer<typeof AIModelEnum>;
 
-// ============================================
-// User Types
-// ============================================
-
 export const RoleEnum = z.enum(["USER", "ADMIN"]);
 export type Role = z.infer<typeof RoleEnum>;
 
 export const PlatformEnum = z.enum(["WEB", "IOS", "ANDROID"]);
 export type Platform = z.infer<typeof PlatformEnum>;
 
-export const UserSchema = z.object({
-  id: z.string(),
-  clerkId: z.string(),
-  email: z.string().email(),
-  name: z.string().nullable(),
-  avatarUrl: z.string().nullable(),
-  plan: PlanEnum,
-  role: RoleEnum,
-  credits: z.number(),
-  totalCreditsUsed: z.number(),
-  lastCreditReset: z.date().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
-export type User = z.infer<typeof UserSchema>;
-
 // ============================================
-// Project Types
+// Schema Types
 // ============================================
 
 export const CodeFilesSchema = z.record(z.string(), z.string());
@@ -88,50 +75,10 @@ export const AppConfigSchema = z.object({
 });
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 
-export const ProjectSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string().nullable(),
-  slug: z.string(),
-  codeFiles: CodeFilesSchema,
-  appConfig: AppConfigSchema.nullable(),
-  githubRepo: z.string().nullable(),
-  githubUrl: z.string().nullable(),
-  userId: z.string(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
-export type Project = z.infer<typeof ProjectSchema>;
-
-// ============================================
-// Build Types
-// ============================================
-
-export const BuildSchema = z.object({
-  id: z.string(),
-  platform: BuildPlatformEnum,
-  status: BuildStatusEnum,
-  easBuildId: z.string().nullable(),
-  buildUrl: z.string().nullable(),
-  artifactUrl: z.string().nullable(),
-  buildProfile: z.string(),
-  version: z.string().nullable(),
-  buildNumber: z.number().nullable(),
-  logs: z.string().nullable(),
-  errorMessage: z.string().nullable(),
-  startedAt: z.date().nullable(),
-  completedAt: z.date().nullable(),
-  createdAt: z.date(),
-  projectId: z.string(),
-  userId: z.string(),
-});
-export type Build = z.infer<typeof BuildSchema>;
-
 // ============================================
 // API Request/Response Types
 // ============================================
 
-// Vibe Generate
 export const GenerateRequestSchema = z.object({
   prompt: z.string().min(1).max(10000),
   projectId: z.string(),
@@ -147,7 +94,6 @@ export const GenerateResponseSchema = z.object({
 });
 export type GenerateResponse = z.infer<typeof GenerateResponseSchema>;
 
-// Vibe Refine
 export const RefineRequestSchema = z.object({
   prompt: z.string().min(1).max(10000),
   projectId: z.string(),
@@ -156,7 +102,6 @@ export const RefineRequestSchema = z.object({
 });
 export type RefineRequest = z.infer<typeof RefineRequestSchema>;
 
-// Build Request
 export const BuildRequestSchema = z.object({
   projectId: z.string(),
   platform: BuildPlatformEnum,
@@ -166,7 +111,6 @@ export const BuildRequestSchema = z.object({
 });
 export type BuildRequest = z.infer<typeof BuildRequestSchema>;
 
-// GitHub
 export const CreateRepoRequestSchema = z.object({
   projectId: z.string(),
   repoName: z.string().min(1).max(100),
@@ -181,7 +125,6 @@ export const PushCodeRequestSchema = z.object({
 });
 export type PushCodeRequest = z.infer<typeof PushCodeRequestSchema>;
 
-// Credentials
 export const AppleCredentialSchema = z.object({
   name: z.string().min(1),
   keyId: z.string().min(1),
@@ -206,10 +149,6 @@ export const ExpoCredentialSchema = z.object({
 });
 export type ExpoCredential = z.infer<typeof ExpoCredentialSchema>;
 
-// ============================================
-// Chat/Message Types
-// ============================================
-
 export const ChatMessageSchema = z.object({
   id: z.string(),
   role: z.enum(["user", "assistant", "system"]),
@@ -220,19 +159,25 @@ export const ChatMessageSchema = z.object({
 });
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
+export const PreviewRequestSchema = z.object({
+  code: z.string(),
+  entryFile: z.string().default("App.tsx"),
+});
+export type PreviewRequest = z.infer<typeof PreviewRequestSchema>;
+
 // ============================================
-// Plan Limits (Credits aligned with createanything.com)
+// Plan Limits
 // ============================================
 
 export interface PlanLimits {
   monthlyCredits: number;
-  creditsRefresh: boolean; // Whether credits reset monthly
+  creditsRefresh: boolean;
   maxProjects: number;
   maxFilesPerProject: number;
   priorityQueue: boolean;
   githubIntegration: boolean;
   buildAccess: boolean;
-  customApiKey: boolean; // Can use own API keys
+  customApiKey: boolean;
   privateProjects: boolean;
   removeBranding: boolean;
   defaultModel: AIModel;
@@ -240,7 +185,7 @@ export interface PlanLimits {
 
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   FREE: {
-    monthlyCredits: 3000, // One-time, no monthly reset
+    monthlyCredits: 3000,
     creditsRefresh: false,
     maxProjects: 3,
     maxFilesPerProject: 20,
@@ -253,7 +198,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     defaultModel: "grok",
   },
   PRO: {
-    monthlyCredits: 20000, // Resets monthly
+    monthlyCredits: 20000,
     creditsRefresh: true,
     maxProjects: 20,
     maxFilesPerProject: 100,
@@ -266,9 +211,9 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     defaultModel: "grok",
   },
   ELITE: {
-    monthlyCredits: 50000, // Resets monthly
+    monthlyCredits: 50000,
     creditsRefresh: true,
-    maxProjects: -1, // unlimited
+    maxProjects: -1,
     maxFilesPerProject: -1,
     priorityQueue: true,
     githubIntegration: true,
@@ -280,26 +225,17 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   },
 };
 
-// ============================================
-// Credit Costs per Operation
-// ============================================
-
 export const CREDIT_COSTS = {
-  // Code generation (AI)
-  codeGeneration: 100, // Per generation request
-  codeRefinement: 50, // Per refinement
-
-  // Builds
-  buildAndroid: 500, // Per Android build
-  buildIOS: 500, // Per iOS build
-
-  // Other operations
-  exportProject: 0, // Free
-  githubPush: 10, // Per push
+  codeGeneration: 100,
+  codeRefinement: 50,
+  buildAndroid: 500,
+  buildIOS: 500,
+  exportProject: 0,
+  githubPush: 10,
 } as const;
 
 // ============================================
-// File Tree Types
+// Utility Types
 // ============================================
 
 export interface FileTreeNode {
@@ -308,20 +244,6 @@ export interface FileTreeNode {
   type: "file" | "folder";
   children?: FileTreeNode[];
 }
-
-// ============================================
-// Preview Types
-// ============================================
-
-export const PreviewRequestSchema = z.object({
-  code: z.string(),
-  entryFile: z.string().default("App.tsx"),
-});
-export type PreviewRequest = z.infer<typeof PreviewRequestSchema>;
-
-// ============================================
-// Error Types
-// ============================================
 
 export class AppError extends Error {
   constructor(

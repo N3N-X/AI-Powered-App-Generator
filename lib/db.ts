@@ -1,28 +1,52 @@
-import { PrismaClient } from "@prisma/client";
+/**
+ * Database helper - now uses Supabase directly
+ * Import Supabase helpers instead of Prisma
+ */
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+// Re-export Supabase helpers for convenience
+export {
+  getOrCreateUser,
+  getUserById,
+  updateUser,
+  getUserProjects,
+  getProjectById,
+  createProject,
+  updateProject,
+  deleteProject,
+  isSubdomainAvailable,
+  isSlugAvailable,
+  getUserBuilds,
+  createBuild,
+  updateBuild,
+  getProjectApiKeys,
+  createApiKey,
+  deleteApiKey,
+  logPrompt,
+  getUserUsageStats,
+  deductCredits,
+  addCredits,
+  createTokenPurchase,
+  PLAN_LIMITS,
+} from '@/lib/supabase/db';
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["query", "error", "warn"]
-        : ["error"],
-    errorFormat: "pretty",
-  });
+// Re-export types
+export type {
+  User,
+  Project,
+  Build,
+  PromptHistory,
+  ProjectApiKey,
+  TokenPurchase,
+} from '@/lib/supabase/db';
 
-// Log connection on first use
-prisma.$connect().catch((err) => {
-  console.error("Failed to connect to database:", err);
-  console.error("POSTGRES_URL exists:", !!process.env.POSTGRES_URL);
-  console.error("DATABASE_URL exists:", !!process.env.DATABASE_URL);
+// For files that still import "prisma", provide a default export
+// that throws an error telling devs to use Supabase instead
+const prismaDeprecated = new Proxy({}, {
+  get() {
+    throw new Error(
+      'Prisma has been replaced with Supabase! Use: import { createClient } from "@/lib/supabase/server"'
+    );
+  }
 });
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
-
-export default prisma;
+export default prismaDeprecated;

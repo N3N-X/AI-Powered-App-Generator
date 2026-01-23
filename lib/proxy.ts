@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "crypto";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 import { redis } from "@/lib/rate-limit";
 import { Ratelimit } from "@upstash/ratelimit";
 import {

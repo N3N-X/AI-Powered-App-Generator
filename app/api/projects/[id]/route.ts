@@ -1,7 +1,7 @@
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 import { Prisma } from "@prisma/client";
 
 // Validate file paths to prevent path traversal attacks

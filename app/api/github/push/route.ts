@@ -1,7 +1,7 @@
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 import { decrypt } from "@/lib/encrypt";
 import { pushCodeToRepo } from "@/lib/github";
 import { PushCodeRequestSchema, PLAN_LIMITS, Plan, CodeFiles } from "@/types";

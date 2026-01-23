@@ -16,7 +16,7 @@ export async function OPTIONS() {
   return proxyCorsOptions();
 }
 import { AIProxyRequestSchema } from "@/types/proxy";
-import { ProxyService } from "@prisma/client";
+import type { ProxyService } from "@/lib/supabase/types";
 
 /**
  * @swagger
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
 
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
-  if (!hasServiceAccess(services, ProxyService.XAI)) {
+  if (!hasServiceAccess(services, "XAI)) {
     return proxyError(
       "This API key does not have access to the xAI service",
       "FORBIDDEN",
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
         apiKeyId,
         projectId,
         userId,
-        service: ProxyService.XAI,
+        service: "XAI,
         operation: "chat.completions",
         creditsUsed: 0,
         success: false,
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.XAI,
+      service: "XAI,
       operation: "chat.completions",
       creditsUsed,
       success: true,
@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.XAI,
+      service: "XAI,
       operation: "chat.completions",
       creditsUsed: 0,
       success: false,

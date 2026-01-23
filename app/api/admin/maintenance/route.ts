@@ -1,6 +1,6 @@
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 import { writeFileSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -37,10 +37,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user is admin
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      select: { role: true },
-    });
+    const supabase = await createClient();
+    const { data: user } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", uid)
+      .single();
 
     if (!user || user.role !== "ADMIN") {
       return NextResponse.json(
@@ -115,10 +117,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user is admin
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      select: { role: true },
-    });
+    const supabase = await createClient();
+    const { data: user } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", uid)
+      .single();
 
     if (!user || user.role !== "ADMIN") {
       return NextResponse.json(

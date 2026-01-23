@@ -16,7 +16,7 @@ export async function OPTIONS() {
   return proxyCorsOptions();
 }
 import { EmailProxyRequestSchema } from "@/types/proxy";
-import { ProxyService } from "@prisma/client";
+import type { ProxyService } from "@/lib/supabase/types";
 
 /**
  * @swagger
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, ProxyService.EMAIL)) {
+  if (!hasServiceAccess(services, "EMAIL)) {
     return proxyError(
       "This API key does not have access to the Email service",
       "FORBIDDEN",
@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
         apiKeyId,
         projectId,
         userId,
-        service: ProxyService.EMAIL,
+        service: "EMAIL,
         operation: "send",
         creditsUsed: 0,
         success: false,
@@ -327,7 +327,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.EMAIL,
+      service: "EMAIL,
       operation: "send",
       creditsUsed: creditsRequired,
       success: true,
@@ -351,7 +351,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.EMAIL,
+      service: "EMAIL,
       operation: "send",
       creditsUsed: 0,
       success: false,

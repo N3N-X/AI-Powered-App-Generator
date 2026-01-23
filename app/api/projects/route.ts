@@ -1,24 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import prisma from "@/lib/db";
+import {
+  getUserProjects,
+  getOrCreateUser,
+  createProject,
+  isSlugAvailable,
+  isSubdomainAvailable,
+} from "@/lib/supabase/db";
 import { slugify } from "@/lib/utils";
 import {
   generateSubdomainFromName,
   RESERVED_SUBDOMAINS,
 } from "@/lib/subdomain";
 import { generateApiKey } from "@/lib/proxy";
-import { ProxyService } from "@prisma/client";
+import type { ProxyService } from "@/lib/supabase/types";
 import { corsHeaders, handleCorsOptions, withCors } from "@/lib/cors";
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
 
 // Default services for auto-generated API keys
 const DEFAULT_PROJECT_SERVICES: ProxyService[] = [
-  ProxyService.DATABASE,
-  ProxyService.EMAIL,
-  ProxyService.SMS,
-  ProxyService.MAPS,
-  ProxyService.STORAGE,
-  ProxyService.OPENAI,
+  "DATABASE",
+  "EMAIL",
+  "SMS",
+  "MAPS",
+  "STORAGE",
+  "OPENAI",
 ];
 
 const createProjectSchema = z.object({
@@ -35,50 +41,20 @@ export async function OPTIONS() {
 
 export async function GET(request: NextRequest) {
   try {
-    const { uid } = await getAuthenticatedUser(request);
-    if (!uid) {
+    const { uid, email } = await getAuthenticatedUser(request);
+    if (!uid || !email) {
       return withCors(
         NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
       );
     }
 
-    // Find user in database
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      include: {
-        projects: {
-          orderBy: { updatedAt: "desc" },
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            description: true,
-            platform: true,
-            subdomain: true,
-            customDomain: true,
-            domainVerified: true,
-            githubRepo: true,
-            codeFiles: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        },
-      },
-    });
+    // Get or create user
+    await getOrCreateUser(uid, email);
 
-    if (!user) {
-      // Create user if doesn't exist
-      const newUser = await prisma.user.create({
-        data: {
-          id: uid,
-          email: `${uid}@placeholder.com`, // Will be updated from Firebase
-        },
-        include: { projects: true },
-      });
-      return withCors(NextResponse.json({ projects: newUser.projects }));
-    }
+    // Get user's projects
+    const projects = await getUserProjects(uid);
 
-    return withCors(NextResponse.json({ projects: user.projects }));
+    return withCors(NextResponse.json({ projects }));
   } catch (error) {
     console.error("Failed to fetch projects:", error);
     return withCors(
@@ -89,8 +65,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { uid } = await getAuthenticatedUser(request);
-    if (!uid) {
+    const { uid, email } = await getAuthenticatedUser(request);
+    if (!uid || !email) {
       return withCors(
         NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
       );
@@ -99,28 +75,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = createProjectSchema.parse(body);
 
-    // Find or create user
-    let user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
-
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          id: uid,
-          email: `${uid}@placeholder.com`,
-        },
-      });
-    }
+    // Ensure user exists
+    await getOrCreateUser(uid, email);
 
     // Generate unique slug
     let slug = slugify(data.name);
     let counter = 1;
-    while (
-      await prisma.project.findUnique({
-        where: { userId_slug: { userId: user.id, slug } },
-      })
-    ) {
+    while (!(await isSlugAvailable(uid, slug))) {
       slug = `${slugify(data.name)}-${counter}`;
       counter++;
     }
@@ -131,20 +92,14 @@ export async function POST(request: NextRequest) {
     // Auto-assign subdomain for WEB projects
     let subdomain: string | null = null;
     if (data.platform === "WEB") {
-      // Generate unique subdomain
       let attempts = 0;
       const maxAttempts = 10;
 
       while (attempts < maxAttempts) {
         const candidate = generateSubdomainFromName(data.name);
 
-        // Check if reserved or already taken
         if (!RESERVED_SUBDOMAINS.has(candidate)) {
-          const existing = await prisma.project.findUnique({
-            where: { subdomain: candidate },
-          });
-
-          if (!existing) {
+          if (await isSubdomainAvailable(candidate)) {
             subdomain = candidate;
             break;
           }
@@ -154,20 +109,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Create project
-    const project = await prisma.project.create({
-      data: {
+    const project = await createProject({
+      name: data.name,
+      description: data.description,
+      slug,
+      platform: data.platform,
+      code_files: codeFiles,
+      user_id: uid,
+      subdomain,
+      app_config: {
         name: data.name,
-        description: data.description,
         slug,
-        platform: data.platform,
-        codeFiles,
-        userId: user.id,
-        subdomain,
-        appConfig: {
-          name: data.name,
-          slug,
-          version: "1.0.0",
-        },
+        version: "1.0.0",
       },
     });
 

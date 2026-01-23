@@ -1,9 +1,9 @@
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 import { generateApiKey } from "@/lib/proxy";
-import { ProxyService } from "@prisma/client";
+import type { ProxyService } from "@/lib/supabase/types";
 
 const CreateKeySchema = z.object({
   projectId: z.string(),

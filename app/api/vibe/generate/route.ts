@@ -1,7 +1,7 @@
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 import { checkPlanRateLimit, incrementUsage } from "@/lib/rate-limit";
 import { Plan, CodeFiles, CREDIT_COSTS } from "@/types";
 import { orchestratePlan, orchestrateBuild } from "@/lib/agents/orchestrator";

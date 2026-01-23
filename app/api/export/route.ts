@@ -1,7 +1,7 @@
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import JSZip from "jszip";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 import { prepareProjectForBuild } from "@/lib/eas";
 import { generateGitignore, generateReadme } from "@/lib/github";
 import { CodeFiles, AppConfig } from "@/types";

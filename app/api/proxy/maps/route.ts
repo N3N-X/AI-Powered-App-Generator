@@ -20,7 +20,7 @@ import {
   MapsDirectionsRequestSchema,
   MapsPlacesRequestSchema,
 } from "@/types/proxy";
-import { ProxyService } from "@prisma/client";
+import type { ProxyService } from "@/lib/supabase/types";
 
 const GOOGLE_MAPS_BASE_URL = "https://maps.googleapis.com/maps/api";
 
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, ProxyService.MAPS)) {
+  if (!hasServiceAccess(services, "MAPS)) {
     return proxyError(
       "This API key does not have access to the Maps service",
       "FORBIDDEN",
@@ -279,7 +279,7 @@ export async function POST(request: NextRequest) {
         apiKeyId,
         projectId,
         userId,
-        service: ProxyService.MAPS,
+        service: "MAPS,
         operation,
         creditsUsed: 0,
         success: false,
@@ -303,7 +303,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.MAPS,
+      service: "MAPS,
       operation,
       creditsUsed: 1,
       success: true,
@@ -324,7 +324,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: ProxyService.MAPS,
+      service: "MAPS,
       operation,
       creditsUsed: 0,
       success: false,

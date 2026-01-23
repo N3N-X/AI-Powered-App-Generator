@@ -1,6 +1,6 @@
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 import { CodeFiles } from "@/types";
 
 export async function GET(request: NextRequest) {
