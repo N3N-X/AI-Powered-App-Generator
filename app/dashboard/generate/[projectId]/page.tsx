@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAuth } from "@/contexts/AuthContext";
 import dynamic from "next/dynamic";
 import { useProjectStore } from "@/stores/project-store";
 import { useUserStore } from "@/stores/user-store";
@@ -50,7 +50,7 @@ export default function ProjectWorkspace() {
   const params = useParams();
   const projectId = params.projectId as string;
 
-  const { user: clerkUser } = useUser();
+  const { user: authUser, loading: authLoading } = useAuth();
   const { currentProject, setCurrentProject, setProjects } = useProjectStore();
   const { setUser, setConnectedServices } = useUserStore();
   const [isLoading, setIsLoading] = useState(true);
@@ -58,7 +58,7 @@ export default function ProjectWorkspace() {
 
   useEffect(() => {
     async function fetchData() {
-      if (!clerkUser) return;
+      if (!authUser || authLoading) return;
 
       try {
         setIsLoading(true);
@@ -101,7 +101,8 @@ export default function ProjectWorkspace() {
 
     fetchData();
   }, [
-    clerkUser,
+    authUser,
+    authLoading,
     projectId,
     setProjects,
     setCurrentProject,

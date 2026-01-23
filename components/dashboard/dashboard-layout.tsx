@@ -1,13 +1,21 @@
 "use client";
 
-import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUserStore } from "@/stores/user-store";
 import { useUIStore } from "@/stores/ui-store";
+import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   LayoutDashboard,
   FolderOpen,
@@ -21,8 +29,12 @@ import {
   Menu,
   X,
   Shield,
+  User as UserIcon,
+  LogOut,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const navItems = [
   { title: "Overview", href: "/dashboard", icon: LayoutDashboard, exact: true },
@@ -40,7 +52,9 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+  const router = useRouter();
   const pathname = usePathname();
+  const { user: authUser, loading: authLoading, logout } = useAuth();
   const { user } = useUserStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isAdmin = user?.role === "ADMIN";
@@ -151,23 +165,86 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 )}
               </button>
 
-              <div className="flex items-center gap-2">
-                <UserButton
-                  afterSignOutUrl="/"
-                  appearance={{ elements: { avatarBox: "h-8 w-8" } }}
-                />
-                <div className="hidden sm:block">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {user?.name || user?.email?.split("@")[0]}
-                  </p>
-                  <Badge
-                    variant={user?.plan === "ELITE" ? "premium" : "secondary"}
-                    className="text-xs"
-                  >
-                    {user?.plan || "FREE"}
-                  </Badge>
-                </div>
-              </div>
+              {/* User Menu */}
+              {!authLoading && authUser && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="flex items-center gap-2 h-auto py-1.5 px-2"
+                    >
+                      <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-sm font-bold text-white">
+                        {authUser.user_metadata?.avatar_url ? (
+                          <img
+                            src={authUser.user_metadata.avatar_url}
+                            alt="Profile"
+                            className="h-full w-full rounded-full object-cover"
+                          />
+                        ) : (
+                          authUser.user_metadata?.display_name?.[0] ||
+                          authUser.user_metadata?.full_name?.[0] ||
+                          authUser.email?.[0]?.toUpperCase()
+                        )}
+                      </div>
+                      <div className="hidden sm:block text-left">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {user?.name ||
+                            authUser.user_metadata?.display_name ||
+                            authUser.user_metadata?.full_name ||
+                            authUser.email?.split("@")[0]}
+                        </p>
+                        <Badge
+                          variant={
+                            user?.plan === "ELITE" ? "premium" : "secondary"
+                          }
+                          className="text-xs"
+                        >
+                          {user?.plan || "FREE"}
+                        </Badge>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-gray-500 dark:text-slate-400 hidden sm:block" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">
+                          {authUser.user_metadata?.display_name ||
+                            authUser.user_metadata?.full_name ||
+                            "User"}
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-slate-400">
+                          {authUser.email}
+                        </span>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => router.push("/user-profile")}
+                    >
+                      <UserIcon className="h-4 w-4 mr-2" />
+                      Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => router.push("/dashboard/settings")}
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={async () => {
+                        await logout();
+                        router.push("/");
+                      }}
+                      className="text-red-600 dark:text-red-400"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </div>
 

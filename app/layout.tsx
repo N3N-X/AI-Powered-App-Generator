@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import { Inter } from "next/font/google";
-import { ClerkProvider } from "@clerk/nextjs";
-import { dark } from "@clerk/themes";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 import { ThemeProvider } from "@/components/shared/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
@@ -119,63 +118,40 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider
-      appearance={{
-        baseTheme: dark,
-        variables: {
-          colorPrimary: "#8b5cf6",
-          colorBackground: "#0f172a",
-          colorInputBackground: "#1e293b",
-          colorInputText: "#e2e8f0",
-          borderRadius: "0.75rem",
-        },
-        elements: {
-          formButtonPrimary:
-            "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500",
-          card: "bg-slate-900/50 backdrop-blur-xl border border-white/10",
-          headerTitle: "text-white",
-          headerSubtitle: "text-slate-400",
-          socialButtonsBlockButton:
-            "bg-white/5 border-white/10 hover:bg-white/10",
-          formFieldLabel: "text-slate-300",
-          formFieldInput: "bg-slate-800/50 border-slate-700",
-          footerActionLink: "text-violet-400 hover:text-violet-300",
-        },
-      }}
-    >
-      <html lang="en" suppressHydrationWarning>
-        <head>
-          {/* Structured Data for SEO */}
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: JSON.stringify(generateOrganizationSchema()),
-            }}
-          />
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: JSON.stringify(generateWebsiteSchema()),
-            }}
-          />
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: JSON.stringify(generateSoftwareApplicationSchema()),
-            }}
-          />
-        </head>
-        <body className={`${inter.variable} font-sans antialiased`}>
-          <Script
-            id="sl-settings"
-            strategy="beforeInteractive"
-            dangerouslySetInnerHTML={{
-              __html: `(function() {
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Structured Data for SEO */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(generateOrganizationSchema()),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(generateWebsiteSchema()),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(generateSoftwareApplicationSchema()),
+          }}
+        />
+      </head>
+      <body className={`${inter.variable} font-sans antialiased`}>
+        <Script
+          id="sl-settings"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(function() {
                 window.SLSettings = window.SLSettings || {};
                 window.SLSettings.showSLButton = false;
               })();`,
-            }}
-          />
+          }}
+        />
+        <AuthProvider>
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
@@ -185,8 +161,8 @@ export default function RootLayout({
             {children}
             <Toaster />
           </ThemeProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+        </AuthProvider>
+      </body>
+    </html>
   );
 }

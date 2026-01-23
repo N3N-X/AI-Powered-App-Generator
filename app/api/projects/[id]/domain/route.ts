@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/db";
@@ -54,18 +54,18 @@ const updateDomainSchema = z.object({
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id } = await params;
 
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { id: uid },
     });
 
     if (!user) {
@@ -94,7 +94,7 @@ export async function GET(
     if (project.platform !== "WEB") {
       return NextResponse.json(
         { error: "Domain settings are only available for web projects" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -114,7 +114,7 @@ export async function GET(
     console.error("Failed to fetch domain settings:", error);
     return NextResponse.json(
       { error: "Failed to fetch domain settings" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -128,11 +128,11 @@ export async function GET(
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -141,7 +141,7 @@ export async function PATCH(
     const data = updateDomainSchema.parse(body);
 
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { id: uid },
     });
 
     if (!user) {
@@ -162,7 +162,7 @@ export async function PATCH(
     if (project.platform !== "WEB") {
       return NextResponse.json(
         { error: "Domain settings are only available for web projects" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -174,7 +174,7 @@ export async function PATCH(
       if (RESERVED_SUBDOMAINS.includes(lowerSubdomain)) {
         return NextResponse.json(
           { error: "This subdomain is reserved" },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -189,7 +189,7 @@ export async function PATCH(
       if (existing) {
         return NextResponse.json(
           { error: "This subdomain is already taken" },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -211,7 +211,7 @@ export async function PATCH(
       if (existing) {
         return NextResponse.json(
           { error: "This domain is already registered to another project" },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -268,14 +268,14 @@ export async function PATCH(
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: "Validation error", details: error.errors },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     console.error("Failed to update domain settings:", error);
     return NextResponse.json(
       { error: "Failed to update domain settings" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -289,11 +289,11 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -302,7 +302,7 @@ export async function DELETE(
     const type = searchParams.get("type"); // "subdomain" | "customDomain" | "all"
 
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { id: uid },
     });
 
     if (!user) {
@@ -320,7 +320,11 @@ export async function DELETE(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const updateData: { subdomain?: null; customDomain?: null; domainVerified?: boolean } = {};
+    const updateData: {
+      subdomain?: null;
+      customDomain?: null;
+      domainVerified?: boolean;
+    } = {};
 
     if (type === "subdomain" || type === "all") {
       updateData.subdomain = null;
@@ -333,7 +337,7 @@ export async function DELETE(
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
         { error: "Specify type: subdomain, customDomain, or all" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -347,7 +351,7 @@ export async function DELETE(
     console.error("Failed to remove domain:", error);
     return NextResponse.json(
       { error: "Failed to remove domain" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

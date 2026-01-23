@@ -3,9 +3,10 @@
 import { Rocket, Sparkles, Bell, LogIn } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { SignedIn, SignedOut } from "@clerk/nextjs";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function MaintenancePage() {
+  const { user, loading } = useAuth();
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4">
       <div className="max-w-2xl w-full text-center">
@@ -51,30 +52,30 @@ export default function MaintenancePage() {
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <SignedOut>
+          {!loading && !user && (
             <Button variant="gradient" asChild>
               <Link href="/sign-in">
                 <LogIn className="h-4 w-4 mr-2" />
                 Sign In
               </Link>
             </Button>
-          </SignedOut>
-          <SignedIn>
+          )}
+          {!loading && user && (
             <Button
               variant="gradient"
               onClick={() => (window.location.href = "/dashboard")}
             >
               Go to Dashboard
             </Button>
-          </SignedIn>
+          )}
           <Button variant="outline" onClick={() => window.location.reload()}>
             Refresh Page
           </Button>
-          <SignedOut>
+          {!loading && !user && (
             <Button variant="outline" asChild>
               <Link href="/">Back to Home</Link>
             </Button>
-          </SignedOut>
+          )}
         </div>
 
         {/* Footer */}

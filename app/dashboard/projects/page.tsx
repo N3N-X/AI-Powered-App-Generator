@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useAuth } from "@/contexts/AuthContext";
 // Link import removed - not used directly
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +39,7 @@ import { toast } from "@/hooks/use-toast";
 
 export default function ProjectsPage() {
   const router = useRouter();
-  const { user: clerkUser } = useUser();
+  const { user: authUser, loading: authLoading } = useAuth();
   const { projects, setProjects, setCurrentProject } = useProjectStore();
   const { setUser, setConnectedServices } = useUserStore();
   const { openModal } = useUIStore();
@@ -75,10 +75,10 @@ export default function ProjectsPage() {
       }
     }
 
-    if (clerkUser) {
+    if (!authLoading && authUser) {
       fetchData();
     }
-  }, [clerkUser, setProjects, setUser, setConnectedServices]);
+  }, [authUser, authLoading, setProjects, setUser, setConnectedServices]);
 
   const handleOpenProject = async (projectId: string) => {
     try {

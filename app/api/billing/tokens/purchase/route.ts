@@ -1,6 +1,11 @@
-import { auth } from "@clerk/nextjs/server";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
-import { stripe, TOKEN_PACKAGES, TokenPackageType, isStripeConfigured } from "@/lib/billing";
+import {
+  stripe,
+  TOKEN_PACKAGES,
+  TokenPackageType,
+  isStripeConfigured,
+} from "@/lib/billing";
 import prisma from "@/lib/db";
 
 /**
@@ -57,15 +62,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { package: packageType } = await request.json();
 
-    if (!packageType || !["SMALL", "MEDIUM", "LARGE", "MEGA"].includes(packageType)) {
-      return NextResponse.json({ error: "Invalid token package" }, { status: 400 });
+    if (
+      !packageType ||
+      !["SMALL", "MEDIUM", "LARGE", "MEGA"].includes(packageType)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid token package" },
+        { status: 400 },
+      );
     }
 
     const tokenPackage = TOKEN_PACKAGES[packageType as TokenPackageType];
@@ -80,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     // Get user from database
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { id: uid },
     });
 
     if (!user) {
@@ -96,7 +107,7 @@ export async function POST(request: NextRequest) {
         email: user.email,
         name: user.name || undefined,
         metadata: {
-          clerkId: userId,
+          id: uid,
           userId: user.id,
         },
       });
@@ -124,7 +135,7 @@ export async function POST(request: NextRequest) {
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard?token_purchase=canceled`,
       metadata: {
         userId: user.id,
-        clerkId: userId,
+        id: uid,
         packageType: packageType,
         credits: tokenPackage.credits.toString(),
         type: "token_purchase",

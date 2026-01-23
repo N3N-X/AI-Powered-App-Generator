@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, isStripeConfigured } from "@/lib/billing";
 import prisma from "@/lib/db";
@@ -31,7 +31,7 @@ import prisma from "@/lib/db";
  *       500:
  *         description: Failed to create billing portal session
  */
-export async function POST(_request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     // Check if Stripe is configured
     if (!stripe || !isStripeConfigured()) {
@@ -41,14 +41,14 @@ export async function POST(_request: NextRequest) {
       );
     }
 
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Get user from database
     const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { id: uid },
     });
 
     if (!user) {
@@ -64,7 +64,7 @@ export async function POST(_request: NextRequest) {
         email: user.email,
         name: user.name || undefined,
         metadata: {
-          clerkId: userId,
+          id: uid,
           userId: user.id,
         },
       });

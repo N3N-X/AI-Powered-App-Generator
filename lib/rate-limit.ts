@@ -202,4 +202,49 @@ export async function getNextBuild(): Promise<string | null> {
   return await redis.lpop<string>("rux:builds:standard");
 }
 
+/**
+ * Simple IP-based rate limiting for public endpoints (auth, etc.)
+ */
+export async function checkRateLimit(
+  request: Request,
+  options: { limit: number; window: number }, // window in milliseconds
+): Promise<RateLimitResult> {
+  // Get IP address from request
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0] ||
+    request.headers.get("x-real-ip") ||
+    "unknown";
+
+  const key = `rux:ratelimit:ip:${ip}`;
+  const windowSeconds = Math.floor(options.window / 1000);
+
+  // Get current count
+  const current = (await redis.get<number>(key)) || 0;
+
+  if (current >= options.limit) {
+    const ttl = await redis.ttl(key);
+    return {
+      success: false,
+      remaining: 0,
+      reset: ttl > 0 ? ttl : windowSeconds,
+      limit: options.limit,
+    };
+  }
+
+  // Increment counter
+  if (current === 0) {
+    // First request in window
+    await redis.setex(key, windowSeconds, 1);
+  } else {
+    await redis.incr(key);
+  }
+
+  return {
+    success: true,
+    remaining: options.limit - current - 1,
+    reset: await redis.ttl(key),
+    limit: options.limit,
+  };
+}
+
 export { redis };

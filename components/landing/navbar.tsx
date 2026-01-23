@@ -1,12 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useAuth, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Sparkles, Sun, Moon, Monitor } from "lucide-react";
+import {
+  Menu,
+  X,
+  Sparkles,
+  Sun,
+  Moon,
+  Monitor,
+  User,
+  LogOut,
+} from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
+import { useRouter } from "next/navigation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const navLinks = [
   { href: "#features", label: "Features" },
@@ -17,6 +35,8 @@ const navLinks = [
 export function LandingNavbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, setTheme } = useUIStore();
+  const { user, logout, loading } = useAuth();
+  const router = useRouter();
 
   const handleThemeToggle = () => {
     if (theme === "system") setTheme("light");
@@ -28,6 +48,25 @@ export function LandingNavbar() {
     if (theme === "light") return <Sun className="h-4 w-4" />;
     if (theme === "dark") return <Moon className="h-4 w-4" />;
     return <Monitor className="h-4 w-4" />;
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/");
+  };
+
+  const getUserInitials = () => {
+    const displayName =
+      user?.user_metadata?.display_name || user?.user_metadata?.full_name;
+    if (displayName) {
+      return displayName
+        .split(" ")
+        .map((n: string) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2);
+    }
+    return user?.email?.[0].toUpperCase() || "U";
   };
 
   return (
@@ -69,27 +108,74 @@ export function LandingNavbar() {
               {getThemeIcon()}
             </Button>
 
-            <SignedOut>
-              <Button variant="ghost" asChild>
-                <Link href="/sign-in">Sign In</Link>
-              </Button>
-              <Button variant="gradient" asChild>
-                <Link href="/sign-up">Get Started</Link>
-              </Button>
-            </SignedOut>
-            <SignedIn>
-              <Button variant="gradient" asChild>
-                <Link href="/dashboard">Dashboard</Link>
-              </Button>
-              <UserButton
-                afterSignOutUrl="/"
-                appearance={{
-                  elements: {
-                    avatarBox: "h-9 w-9",
-                  },
-                }}
-              />
-            </SignedIn>
+            {!loading && !user && (
+              <>
+                <Button variant="ghost" asChild>
+                  <Link href="/sign-in">Sign In</Link>
+                </Button>
+                <Button variant="gradient" asChild>
+                  <Link href="/sign-up">Get Started</Link>
+                </Button>
+              </>
+            )}
+
+            {!loading && user && (
+              <>
+                <Button variant="gradient" asChild>
+                  <Link href="/dashboard">Dashboard</Link>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 rounded-full"
+                    >
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage
+                          src={user.user_metadata?.avatar_url || undefined}
+                          alt={
+                            user.user_metadata?.display_name ||
+                            user.user_metadata?.full_name ||
+                            "User"
+                          }
+                        />
+                        <AvatarFallback className="bg-gradient-to-br from-violet-600 to-indigo-600 text-white text-sm">
+                          {getUserInitials()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <div className="px-2 py-1.5">
+                      <p className="text-sm font-medium">
+                        {user.user_metadata?.display_name ||
+                          user.user_metadata?.full_name ||
+                          "User"}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {user.email}
+                      </p>
+                    </div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/user-profile" className="cursor-pointer">
+                        <User className="mr-2 h-4 w-4" />
+                        Profile
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="cursor-pointer text-red-600"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -124,23 +210,43 @@ export function LandingNavbar() {
               </Link>
             ))}
             <div className="pt-2 border-t border-white/10 space-y-2">
-              <SignedOut>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start"
-                  asChild
-                >
-                  <Link href="/sign-in">Sign In</Link>
-                </Button>
-                <Button variant="gradient" className="w-full" asChild>
-                  <Link href="/sign-up">Get Started</Link>
-                </Button>
-              </SignedOut>
-              <SignedIn>
-                <Button variant="gradient" className="w-full" asChild>
-                  <Link href="/dashboard">Dashboard</Link>
-                </Button>
-              </SignedIn>
+              {!loading && !user && (
+                <>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start"
+                    asChild
+                  >
+                    <Link href="/sign-in">Sign In</Link>
+                  </Button>
+                  <Button
+                    variant="gradient"
+                    className="w-full justify-start"
+                    asChild
+                  >
+                    <Link href="/sign-up">Get Started</Link>
+                  </Button>
+                </>
+              )}
+              {!loading && user && (
+                <>
+                  <Button
+                    variant="gradient"
+                    className="w-full justify-start"
+                    asChild
+                  >
+                    <Link href="/dashboard">Dashboard</Link>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-red-600"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign Out
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useUser } from "@clerk/nextjs";
+import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
 import { Check, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -85,19 +85,20 @@ const item = {
 };
 
 export function SubscriptionPlans() {
-  const { user, isLoaded, isSignedIn } = useUser();
-  const currentPlan = user?.publicMetadata?.plan as string | undefined;
+  const { user, loading } = useAuth();
+  // Get current plan from user metadata or default to FREE
+  // This would typically come from your database user record
+  const currentPlan = "FREE"; // TODO: Fetch from your user database
 
   const handleUpgrade = (planName: string) => {
-    if (!isSignedIn) {
+    if (!loading && !user) {
       // Redirect to sign up with plan query param
       window.location.href = `/sign-up?plan=${planName.toLowerCase()}`;
       return;
     }
 
-    // For Clerk Billing, redirect to user profile where billing is managed
-    // Clerk automatically shows available subscription plans in the billing section
-    window.location.href = "/user-profile";
+    // Redirect to settings billing page for subscription management
+    window.location.href = "/dashboard/settings?tab=billing";
   };
 
   return (

@@ -1374,10 +1374,10 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
                             />
                           </div>
                           <h3 className="text-lg font-semibold text-white mb-2">
-                            Scan with Expo Go
+                            Scan with RUX
                           </h3>
                           <p className="text-sm text-slate-400 max-w-xs mx-auto">
-                            Open the Expo Go app on your{" "}
+                            Open the RUX app on your{" "}
                             {currentProject.platform === "IOS"
                               ? "iPhone"
                               : "Android"}{" "}
@@ -1426,11 +1426,11 @@ export function MobileWorkspace({ className }: MobileWorkspaceProps) {
                 <img src={qrCodeUrl} alt="QR Code" className="w-64 h-64" />
               </div>
               <h3 className="text-xl font-semibold text-white mb-2">
-                Scan with Expo Go
+                Scan with RUX
               </h3>
               <p className="text-sm text-slate-400 max-w-sm mx-auto mb-4">
-                Download Expo Go from the App Store or Play Store, then scan
-                this code to preview on your device
+                Download RUX from the App Store or Play Store, then scan this
+                code to preview on your device
               </p>
               <Button variant="outline" onClick={() => setShowQrModal(false)}>
                 Close

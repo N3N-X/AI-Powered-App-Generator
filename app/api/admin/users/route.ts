@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/db";
@@ -39,21 +39,21 @@ import prisma from "@/lib/db";
  */
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Check if user is admin
     const adminUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { id: uid },
       select: { role: true },
     });
 
     if (!adminUser || adminUser.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Admin access required" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -81,7 +81,6 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
-          clerkId: true,
           email: true,
           name: true,
           plan: true,
@@ -114,7 +113,7 @@ export async function GET(request: NextRequest) {
     console.error("Admin users list error:", error);
     return NextResponse.json(
       { error: "Failed to fetch users" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -161,21 +160,21 @@ const UpdateUserSchema = z.object({
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Check if user is admin
     const adminUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
+      where: { id: uid },
       select: { role: true },
     });
 
     if (!adminUser || adminUser.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Admin access required" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -205,14 +204,14 @@ export async function PATCH(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: "Validation error", details: error.errors },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     console.error("Admin user update error:", error);
     return NextResponse.json(
       { error: "Failed to update user" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
