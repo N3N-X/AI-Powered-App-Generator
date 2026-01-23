@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { updateSession } from "@/lib/supabase/middleware";
 
 // Define public routes that don't require authentication
 const publicRoutes = [
@@ -9,11 +10,12 @@ const publicRoutes = [
   "/sign-in",
   "/sign-up",
   "/forgot-password",
+  "/auth/callback",
+  "/auth/reset-password",
   "/api/webhooks",
   "/api/health",
   "/api/proxy",
   "/api/serve",
-  "/api/auth", // Auth endpoints are public
   "/docs",
   "/privacy",
   "/terms",
@@ -79,37 +81,33 @@ export async function proxy(req: NextRequest) {
       req.nextUrl.pathname.startsWith("/sign-in") ||
       req.nextUrl.pathname.startsWith("/sign-up") ||
       req.nextUrl.pathname.startsWith("/api/webhooks") ||
-      req.nextUrl.pathname.startsWith("/api/auth")
+      req.nextUrl.pathname.startsWith("/auth/")
     ) {
       return NextResponse.next();
     }
 
-    // In maintenance mode, check if user has session cookie
-    // Admin verification will be done in API routes using Firebase Admin SDK
-    const sessionCookie = req.cookies.get("__session")?.value;
+    // In maintenance mode, check if user is authenticated
+    const { supabaseResponse, user } = await updateSession(req);
 
-    if (!sessionCookie) {
+    if (!user) {
       return NextResponse.redirect(new URL("/maintenance", req.url));
     }
 
-    // Let the request through - admin verification happens in API routes
-    // This avoids using Firebase Admin SDK in Edge Runtime
+    // Check if user is admin (you can add admin check logic here)
+    // For now, let authenticated users through during maintenance
   }
 
   // Allow public routes
   if (isPublicRoute(req.nextUrl.pathname)) {
-    return NextResponse.next();
+    // Still update session for public routes to maintain auth state
+    const { supabaseResponse } = await updateSession(req);
+    return supabaseResponse;
   }
 
-  // For protected routes, check for authentication
-  const sessionCookie = req.cookies.get("__session")?.value;
-  const authHeader = req.headers.get("Authorization");
+  // For protected routes, check authentication
+  const { supabaseResponse, user } = await updateSession(req);
 
-  // Check if user has either session cookie OR Authorization header
-  const hasAuth =
-    sessionCookie || (authHeader && authHeader.startsWith("Bearer "));
-
-  if (!hasAuth) {
+  if (!user) {
     // For API routes, return 401
     if (isApiRoute(req.nextUrl.pathname)) {
       return NextResponse.json(
@@ -123,15 +121,12 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(signInUrl);
   }
 
-  // For API routes, just pass the request through
-  // The API routes will verify the session cookie or Bearer token using Firebase Admin SDK
-  // We don't verify here to avoid Edge Runtime issues
-  return NextResponse.next();
+  return supabaseResponse;
 }
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and static files, but include all other routes
+    // Skip Next.js internals and static files
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)).*)",
     // Always run for API routes
     "/api/:path*",

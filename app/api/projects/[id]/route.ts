@@ -57,7 +57,7 @@ export async function GET(
     const { id } = await params;
 
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
     });
 
     if (!user) {
@@ -154,7 +154,7 @@ export async function PATCH(
     const data = updateProjectSchema.parse(body);
 
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
     });
 
     if (!user) {
@@ -272,7 +272,7 @@ export async function DELETE(
     const { id } = await params;
 
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
     });
 
     if (!user) {

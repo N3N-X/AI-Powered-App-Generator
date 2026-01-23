@@ -7,18 +7,8 @@ import {
   useState,
   ReactNode,
 } from "react";
-import {
-  User,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  GoogleAuthProvider,
-  signInWithPopup,
-  sendPasswordResetEmail,
-  updateProfile,
-} from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { createClient } from "@/lib/supabase/client";
+import type { User } from "@supabase/supabase-js";
 
 interface AuthContextType {
   user: User | null;
@@ -31,7 +21,6 @@ interface AuthContextType {
   ) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
-  getToken: () => Promise<string | null>;
   resetPassword: (email: string) => Promise<void>;
   updateUserProfile: (displayName?: string, photoURL?: string) => Promise<void>;
 }
@@ -41,42 +30,32 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const supabase = createClient();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-
-      // Create session cookie when user signs in
-      if (user) {
-        try {
-          const idToken = await user.getIdToken();
-          const response = await fetch("/api/auth/session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ idToken }),
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            console.error("Failed to create session cookie:", error);
-            // Session cookie creation failed, but user can still use Bearer token
-            console.warn("Falling back to Authorization header for API calls");
-          } else {
-            console.log("Session cookie created successfully");
-          }
-        } catch (error) {
-          console.error("Error creating session:", error);
-          // Silently fail - API calls will use Authorization header as fallback
-        }
-      }
-
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
       setLoading(false);
     });
-    return unsubscribe;
-  }, []);
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase.auth]);
 
   const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
   };
 
   const signUp = async (
@@ -84,49 +63,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     displayName?: string,
   ) => {
-    const userCredential = await createUserWithEmailAndPassword(
-      auth,
+    const { error } = await supabase.auth.signUp({
       email,
       password,
-    );
-
-    // Update display name if provided
-    if (displayName && userCredential.user) {
-      await updateProfile(userCredential.user, { displayName });
-    }
+      options: {
+        data: {
+          display_name: displayName,
+        },
+      },
+    });
+    if (error) throw error;
   };
 
   const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (error) throw error;
   };
 
   const logout = async () => {
-    // Clear session cookie
-    try {
-      await fetch("/api/auth/session", { method: "DELETE" });
-    } catch (error) {
-      console.error("Error clearing session:", error);
-    }
-
-    await signOut(auth);
-  };
-
-  const getToken = async (): Promise<string | null> => {
-    if (!user) return null;
-    return user.getIdToken();
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   const resetPassword = async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset-password`,
+    });
+    if (error) throw error;
   };
 
   const updateUserProfile = async (displayName?: string, photoURL?: string) => {
     if (!user) throw new Error("No user logged in");
-    await updateProfile(user, {
-      ...(displayName && { displayName }),
-      ...(photoURL && { photoURL }),
+
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        display_name: displayName,
+        avatar_url: photoURL,
+      },
     });
+    if (error) throw error;
   };
 
   return (
@@ -138,7 +118,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signInWithGoogle,
         logout,
-        getToken,
         resetPassword,
         updateUserProfile,
       }}

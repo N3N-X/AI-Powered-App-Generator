@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
 
     // Verify user owns the project
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
       include: {
         projects: {
           where: { id: projectId },
@@ -259,7 +259,7 @@ export async function GET(request: NextRequest) {
 
     // Verify user owns the project
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
       include: {
         projects: {
           where: { id: projectId },
@@ -333,7 +333,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Verify ownership using Firebase UID
-    const ownerMatches = key.project.user.firebaseUid === uid;
+    const ownerMatches = key.project.user.id === uid;
     if (!ownerMatches) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     // Find user
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
     });
 
     if (!user) {
@@ -140,7 +140,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
     });
 
     if (!user) {
@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
       select: { githubTokenEncrypted: true },
     });
 

@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     // Find user in database
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
       include: {
         projects: {
           orderBy: { updatedAt: "desc" },
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       // Create user if doesn't exist
       const newUser = await prisma.user.create({
         data: {
-          firebaseUid: uid,
+          id: uid,
           email: `${uid}@placeholder.com`, // Will be updated from Firebase
         },
         include: { projects: true },
@@ -101,13 +101,13 @@ export async function POST(request: NextRequest) {
 
     // Find or create user
     let user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
     });
 
     if (!user) {
       user = await prisma.user.create({
         data: {
-          firebaseUid: uid,
+          id: uid,
           email: `${uid}@placeholder.com`,
         },
       });

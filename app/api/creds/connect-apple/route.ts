@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     // Get user
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
     });
 
     if (!user) {
@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
       include: {
         credentials: {
           where: { platform: "apple" },
@@ -281,7 +281,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
     });
 
     if (!user) {

@@ -27,7 +27,7 @@ export async function POST(
     const { id } = await params;
 
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
     });
 
     if (!user) {

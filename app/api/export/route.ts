@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 
     // Get user and project
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
       include: {
         projects: {
           where: { id: projectId },

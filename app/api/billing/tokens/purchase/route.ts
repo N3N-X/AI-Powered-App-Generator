@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     // Get user from database
     const user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
     });
 
     if (!user) {
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         email: user.email,
         name: user.name || undefined,
         metadata: {
-          firebaseUid: uid,
+          id: uid,
           userId: user.id,
         },
       });
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard?token_purchase=canceled`,
       metadata: {
         userId: user.id,
-        firebaseUid: uid,
+        id: uid,
         packageType: packageType,
         credits: tokenPackage.credits.toString(),
         type: "token_purchase",

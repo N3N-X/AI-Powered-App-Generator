@@ -39,8 +39,7 @@ enum BuildPlatform {
 }
 
 model User {
-  id                    String    @id @default(cuid())
-  firebaseUid           String    @unique // Firebase UID
+  id                    String    @id @default(uuid()) // Supabase Auth uses UUID
   email                 String    @unique
   name                  String?
   avatarUrl             String?
@@ -71,7 +70,6 @@ model User {
   promptHistory         PromptHistory[]
   tokenPurchases        TokenPurchase[]
 
-  @@index([firebaseUid])
   @@index([email])
   @@index([stripeCustomerId])
 }

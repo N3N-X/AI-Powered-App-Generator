@@ -1,9 +1,9 @@
 /**
  * Secure API client with automatic authentication
- * Handles both session cookies and Authorization headers
+ * Handles Supabase auth tokens automatically
  */
 
-import { auth } from "@/lib/firebase";
+import { createClient } from "@/lib/supabase/client";
 
 interface FetchOptions extends RequestInit {
   skipAuth?: boolean;
@@ -11,7 +11,7 @@ interface FetchOptions extends RequestInit {
 
 /**
  * Make an authenticated API request
- * Automatically adds Authorization header with Firebase ID token
+ * Automatically adds Authorization header with Supabase session token
  */
 export async function apiClient(
   url: string,
@@ -20,18 +20,29 @@ export async function apiClient(
   const { skipAuth = false, headers = {}, ...restOptions } = options;
 
   // Prepare headers
-  const requestHeaders: HeadersInit = {
-    "Content-Type": "application/json",
-    ...headers,
-  };
+  const requestHeaders = new Headers();
+  requestHeaders.set("Content-Type", "application/json");
+
+  // Add existing headers
+  if (headers) {
+    Object.entries(headers).forEach(([key, value]) => {
+      if (value) requestHeaders.set(key, value as string);
+    });
+  }
 
   // Add Authorization header if user is authenticated (unless explicitly skipped)
-  if (!skipAuth && auth.currentUser) {
+  if (!skipAuth) {
     try {
-      const token = await auth.currentUser.getIdToken();
-      requestHeaders["Authorization"] = `Bearer ${token}`;
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session?.access_token) {
+        requestHeaders.set("Authorization", `Bearer ${session.access_token}`);
+      }
     } catch (error) {
-      console.error("Failed to get ID token:", error);
+      console.error("Failed to get session:", error);
     }
   }
 

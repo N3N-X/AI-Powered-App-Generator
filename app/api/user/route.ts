@@ -3,54 +3,7 @@ import { z } from "zod";
 import prisma from "@/lib/db";
 import { PLAN_LIMITS, Plan } from "@/types";
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
-import { adminAuth } from "@/lib/firebase-admin";
 
-/**
- * @swagger
- * /api/user:
- *   get:
- *     summary: Get current user data from database
- *     description: Retrieves the current user's data. If the user doesn't exist, it creates them. Also handles monthly credit reset for paid plans.
- *     responses:
- *       200:
- *         description: User data retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 user:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: string
- *                     firebaseUid:
- *                       type: string
- *                     email:
- *                       type: string
- *                     name:
- *                       type: string
- *                     avatarUrl:
- *                       type: string
- *                     plan:
- *                       type: string
- *                     role:
- *                       type: string
- *                     credits:
- *                       type: integer
- *                     totalCreditsUsed:
- *                       type: integer
- *                     hasGitHub:
- *                       type: boolean
- *                     hasCustomApiKey:
- *                       type: boolean
- *       401:
- *         description: Unauthorized
- *       404:
- *         description: User not found
- *       500:
- *         description: Failed to fetch user
- */
 export async function GET(request: NextRequest) {
   try {
     const { uid, email } = await getAuthenticatedUser(request);
@@ -59,35 +12,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user from database
+    // Get user from database (id is now the Supabase UUID)
     let user = await prisma.user.findUnique({
-      where: { firebaseUid: uid },
+      where: { id: uid },
     });
 
     // If user doesn't exist in database, create them
     if (!user) {
-      try {
-        const firebaseUser = await adminAuth.getUser(uid);
-
-        user = await prisma.user.create({
-          data: {
-            firebaseUid: uid,
-            email: firebaseUser.email || email || "",
-            name: firebaseUser.displayName || null,
-            avatarUrl: firebaseUser.photoURL || null,
-            plan: "FREE",
-            role: "USER",
-            credits: PLAN_LIMITS.FREE.monthlyCredits, // 3000 for free tier
-            totalCreditsUsed: 0,
-          },
-        });
-      } catch (error) {
-        console.error("Error creating user:", error);
-        return NextResponse.json(
-          { error: "Failed to create user" },
-          { status: 500 },
-        );
-      }
+      user = await prisma.user.create({
+        data: {
+          id: uid, // Supabase UUID
+          email: email || "",
+          plan: "FREE",
+          role: "USER",
+          credits: PLAN_LIMITS.FREE.monthlyCredits,
+          totalCreditsUsed: 0,
+        },
+      });
     }
 
     // Check if we need to reset credits for paid plans (monthly reset)
@@ -116,7 +57,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       user: {
         id: user.id,
-        firebaseUid: user.firebaseUid,
         email: user.email,
         name: user.name,
         avatarUrl: user.avatarUrl,
@@ -145,31 +85,6 @@ const UpdateUserSchema = z.object({
   name: z.string().min(1).max(100).optional(),
 });
 
-/**
- * @swagger
- * /api/user:
- *   patch:
- *     summary: Update current user's profile
- *     description: Updates the current user's profile information.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *     responses:
- *       200:
- *         description: User updated successfully
- *       400:
- *         description: Validation error
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Failed to update user
- */
 export async function PATCH(request: NextRequest) {
   try {
     const { uid } = await getAuthenticatedUser(request);
@@ -182,9 +97,7 @@ export async function PATCH(request: NextRequest) {
     const data = UpdateUserSchema.parse(body);
 
     const user = await prisma.user.update({
-      where: {
-        firebaseUid: uid,
-      },
+      where: { id: uid },
       data: {
         ...(data.name && { name: data.name }),
         updatedAt: new Date(),
