@@ -95,6 +95,7 @@ export function ChatInterface() {
     if (!input.trim() || !currentProject || isGenerating) return;
 
     const userMessage = input.trim();
+    const projectIdAtStart = currentProject.id;
     setInput("");
 
     // Add user message using store
@@ -112,6 +113,8 @@ export function ChatInterface() {
       detail: "Initializing AI agents...",
     });
 
+    const abortController = new AbortController();
+
     try {
       const response = await fetch("/api/vibe/generate", {
         method: "POST",
@@ -120,6 +123,7 @@ export function ChatInterface() {
           prompt: userMessage,
           projectId: currentProject.id,
         }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -149,15 +153,15 @@ export function ChatInterface() {
 
               try {
                 const data = JSON.parse(jsonStr);
+                console.log("[ChatInterface] SSE data received:", {
+                  type: data.type,
+                  phase: data.phase,
+                  hasAppSpec: !!data.appSpec,
+                  message: data.message,
+                });
 
                 // Handle phase updates (new multi-agent format)
                 if (data.type === "phase") {
-                  console.log(
-                    "Phase update:",
-                    data.phase,
-                    data.appSpec ? "has appSpec" : "no appSpec",
-                  );
-
                   setCurrentPhase({
                     phase: data.phase,
                     message: data.message,
@@ -168,9 +172,18 @@ export function ChatInterface() {
 
                   // Check if this phase includes an appSpec (awaiting confirmation)
                   if (data.phase === "awaiting_confirmation" && data.appSpec) {
-                    console.log("Setting pending spec:", data.appSpec.name);
+                    console.log(
+                      "[ChatInterface] Showing confirmation UI for:",
+                      data.appSpec.name,
+                    );
                     setPendingSpec(data.appSpec);
                     setIsGenerating(false);
+
+                    // Add a message to chat showing the plan is ready
+                    addMessage({
+                      role: "assistant",
+                      content: `I've planned your app: **${data.appSpec.name}**\n\nPlease review the plan below and click "Build This" to generate the code, or "Cancel" to start over.`,
+                    });
                   }
                 }
 
@@ -219,6 +232,19 @@ export function ChatInterface() {
 
                 // Handle final result
                 if (data.type === "complete") {
+                  // Validate project hasn't changed during generation
+                  if (projectIdAtStart !== currentProject?.id) {
+                    console.warn(
+                      "[ChatInterface] Project changed during generation, discarding updates",
+                    );
+                    toast({
+                      title: "Generation discarded",
+                      description: "You switched projects during generation",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+
                   // Add assistant message using store
                   addMessage({
                     role: "assistant",
@@ -237,9 +263,11 @@ export function ChatInterface() {
                     });
                   }
 
-                  // Deduct credits locally for immediate UI feedback
-                  // Server already deducted, this syncs local state
-                  deductCredits(100); // CREDIT_COSTS.codeGeneration
+                  // Use server's credit balance (source of truth)
+                  if (data.creditsRemaining !== undefined) {
+                    const setCredits = useUserStore.getState().setCredits;
+                    setCredits(data.creditsRemaining);
+                  }
 
                   toast({
                     title: "Code generated",
@@ -260,6 +288,12 @@ export function ChatInterface() {
         }
       }
     } catch (error) {
+      // Ignore aborted requests (user navigated away)
+      if (error instanceof Error && error.name === "AbortError") {
+        console.log("[ChatInterface] Request aborted (user navigated away)");
+        return;
+      }
+
       console.error("Generation error:", error);
 
       addMessage({

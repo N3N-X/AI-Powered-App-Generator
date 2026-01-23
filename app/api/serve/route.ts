@@ -349,7 +349,16 @@ function generateWebAppHtml(codeFiles: CodeFiles, appName: string): string {
         var hostname = '';
         try {
           hostname = new URL(urlStr, window.location.origin).hostname;
-        } catch(e) {}
+        } catch(e) {
+          console.error('[RUX Sandbox] Invalid URL in fetch:', urlStr);
+          return Promise.reject(new Error('Invalid URL format'));
+        }
+
+        // Only check domain if we have a valid hostname
+        if (!hostname) {
+          console.error('[RUX Sandbox] Empty hostname after parsing:', urlStr);
+          return Promise.reject(new Error('Invalid URL - no hostname'));
+        }
 
         var isAllowed = allowedDomains.some(function(d) {
           return hostname === d || hostname.endsWith('.' + d);
@@ -371,7 +380,16 @@ function generateWebAppHtml(codeFiles: CodeFiles, appName: string): string {
           var hostname = '';
           try {
             hostname = new URL(url, window.location.origin).hostname;
-          } catch(e) {}
+          } catch(e) {
+            console.error('[RUX Sandbox] Invalid URL in XHR:', url);
+            throw new Error('Invalid URL format');
+          }
+
+          // Only check domain if we have a valid hostname
+          if (!hostname) {
+            console.error('[RUX Sandbox] Empty hostname after parsing:', url);
+            throw new Error('Invalid URL - no hostname');
+          }
 
           var isAllowed = allowedDomains.some(function(d) {
             return hostname === d || hostname.endsWith('.' + d);

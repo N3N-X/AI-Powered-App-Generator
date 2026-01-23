@@ -227,10 +227,23 @@ export async function POST(request: NextRequest) {
     );
 
     if (!openaiResponse.ok) {
-      const errorData = await openaiResponse.json().catch(() => ({}));
-      const errorMessage =
-        (errorData as { error?: { message?: string } })?.error?.message ||
-        "OpenAI API error";
+      let errorMessage = "OpenAI API error";
+      let errorData: any = {};
+
+      try {
+        errorData = await openaiResponse.json();
+        errorMessage =
+          errorData?.error?.message ||
+          `OpenAI returned ${openaiResponse.status}: ${openaiResponse.statusText}`;
+      } catch (parseError) {
+        // Response might be HTML error page or plain text
+        const text = await openaiResponse.text().catch(() => "");
+        errorMessage =
+          text ||
+          openaiResponse.statusText ||
+          `OpenAI API error (${openaiResponse.status})`;
+        console.error("[OpenAI Proxy] Non-JSON error response:", text);
+      }
 
       await logProxyUsage({
         apiKeyId,
@@ -241,7 +254,11 @@ export async function POST(request: NextRequest) {
         creditsUsed: 0,
         success: false,
         errorCode: `OPENAI_${openaiResponse.status}`,
-        metadata: { model, messageCount: messages.length },
+        metadata: {
+          model,
+          messageCount: messages.length,
+          errorMessage,
+        },
         latencyMs: Date.now() - startTime,
       });
 

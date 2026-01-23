@@ -15,29 +15,28 @@ import {
 export async function OPTIONS() {
   return proxyCorsOptions();
 }
-import {
-  MapsGeocodeRequestSchema,
-  MapsDirectionsRequestSchema,
-  MapsPlacesRequestSchema,
-} from "@/types/proxy";
-import type { ProxyService } from "@/lib/supabase/types";
-
-const GOOGLE_MAPS_BASE_URL = "https://maps.googleapis.com/maps/api";
 
 /**
  * @swagger
  * /api/proxy/maps:
  *   post:
- *     summary: Google Maps API Proxy
+ *     summary: Maps & Geocoding Proxy (Google Maps API)
  *     description: |
- *       Proxied access to Google Maps APIs including Geocoding, Directions, and Places.
- *       Generated apps can use this endpoint without needing their own Google Maps API key.
+ *       Proxied access to mapping services including geocoding, reverse geocoding,
+ *       directions, and place search. Generated apps can use location features
+ *       without needing their own Google Maps API key.
  *
  *       **Authentication:** Requires a valid RUX API key.
  *
  *       **Rate Limits:** 100 requests per minute per project.
  *
- *       **Credits:** 1 credit per request.
+ *       **Credits:** 3 credits per request.
+ *
+ *       **Operations:**
+ *       - `geocode`: Convert address to coordinates
+ *       - `reverseGeocode`: Convert coordinates to address
+ *       - `directions`: Get directions between two points
+ *       - `placeSearch`: Search for places by query
  *     tags:
  *       - Proxy Services
  *     security:
@@ -53,59 +52,50 @@ const GOOGLE_MAPS_BASE_URL = "https://maps.googleapis.com/maps/api";
  *             properties:
  *               operation:
  *                 type: string
- *                 enum: [geocode, directions, places]
- *                 description: The Maps API operation to perform
+ *                 enum: [geocode, reverseGeocode, directions, placeSearch]
+ *                 description: Type of maps operation
  *               address:
  *                 type: string
  *                 description: Address to geocode (for geocode operation)
- *               latlng:
- *                 type: string
- *                 description: Lat,lng for reverse geocoding (for geocode operation)
- *               placeId:
- *                 type: string
- *                 description: Place ID to lookup (for geocode operation)
+ *               lat:
+ *                 type: number
+ *                 description: Latitude (for reverseGeocode operation)
+ *               lng:
+ *                 type: number
+ *                 description: Longitude (for reverseGeocode operation)
  *               origin:
  *                 type: string
  *                 description: Starting point (for directions operation)
  *               destination:
  *                 type: string
- *                 description: End point (for directions operation)
+ *                 description: Ending point (for directions operation)
  *               mode:
  *                 type: string
  *                 enum: [driving, walking, bicycling, transit]
  *                 default: driving
  *                 description: Travel mode (for directions operation)
- *               waypoints:
- *                 type: array
- *                 items:
- *                   type: string
- *                 description: Waypoints for route (for directions operation)
  *               query:
  *                 type: string
- *                 description: Search query (for places operation)
+ *                 description: Search query (for placeSearch operation)
  *               location:
  *                 type: string
- *                 description: Lat,lng center point (for places operation)
+ *                 description: Center point for place search (lat,lng format)
  *               radius:
  *                 type: number
- *                 maximum: 50000
- *                 description: Search radius in meters (for places operation)
- *               type:
- *                 type: string
- *                 description: Place type filter (for places operation)
+ *                 description: Search radius in meters (for placeSearch operation)
  *     responses:
  *       200:
- *         description: Successful response from Google Maps API
+ *         description: Successful operation
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 results:
- *                   type: array
- *                   description: Results from the Maps API
- *                 status:
- *                   type: string
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Operation-specific response data
  *                 creditsUsed:
  *                   type: integer
  *       400:
@@ -117,7 +107,7 @@ const GOOGLE_MAPS_BASE_URL = "https://maps.googleapis.com/maps/api";
  *       429:
  *         description: Rate limit exceeded
  *       500:
- *         description: Google Maps API error
+ *         description: Maps service error
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -139,204 +129,317 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Check rate limit
+  // Check rate limit (100 requests per minute)
   const rateLimit = await checkProxyRateLimit(projectId, "maps");
   if (!rateLimit.success) {
     return proxyError(
-      `Rate limit exceeded. Try again in ${Math.ceil((rateLimit.reset - Date.now()) / 1000)}s`,
-      "RATE_LIMITED",
+      "Rate limit exceeded. Maximum 100 requests per minute.",
+      "RATE_LIMIT",
       429,
     );
   }
 
-  // Parse request
-  let body;
   try {
-    body = await request.json();
-  } catch {
-    return proxyError("Invalid JSON body", "INVALID_REQUEST", 400);
-  }
+    // Parse request body
+    const body = await request.json();
+    const { operation } = body;
 
-  const { operation, ...params } = body;
-
-  if (!operation || !["geocode", "directions", "places"].includes(operation)) {
-    return proxyError(
-      "Invalid operation. Must be one of: geocode, directions, places",
-      "VALIDATION_ERROR",
-      400,
-    );
-  }
-
-  // Check credits (1 credit per request)
-  const creditCheck = await checkCredits(userId, plan, "maps", 1);
-  if (!creditCheck.hasCredits) {
-    return proxyError(
-      `Insufficient credits. Required: 1, Available: ${creditCheck.available}`,
-      "INSUFFICIENT_CREDITS",
-      402,
-    );
-  }
-
-  const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!googleMapsApiKey) {
-    return proxyError(
-      "Google Maps service not configured",
-      "SERVICE_UNAVAILABLE",
-      503,
-    );
-  }
-
-  try {
-    let url: string;
-    let validatedParams;
-
-    switch (operation) {
-      case "geocode": {
-        const parsed = MapsGeocodeRequestSchema.safeParse(params);
-        if (!parsed.success) {
-          return proxyError(
-            `Validation error: ${parsed.error.errors[0]?.message}`,
-            "VALIDATION_ERROR",
-            400,
-          );
-        }
-        validatedParams = parsed.data;
-
-        const geocodeParams = new URLSearchParams({ key: googleMapsApiKey });
-        if (validatedParams.address)
-          geocodeParams.set("address", validatedParams.address);
-        if (validatedParams.latlng)
-          geocodeParams.set("latlng", validatedParams.latlng);
-        if (validatedParams.placeId)
-          geocodeParams.set("place_id", validatedParams.placeId);
-
-        url = `${GOOGLE_MAPS_BASE_URL}/geocode/json?${geocodeParams}`;
-        break;
-      }
-
-      case "directions": {
-        const parsed = MapsDirectionsRequestSchema.safeParse(params);
-        if (!parsed.success) {
-          return proxyError(
-            `Validation error: ${parsed.error.errors[0]?.message}`,
-            "VALIDATION_ERROR",
-            400,
-          );
-        }
-        validatedParams = parsed.data;
-
-        const dirParams = new URLSearchParams({
-          key: googleMapsApiKey,
-          origin: validatedParams.origin,
-          destination: validatedParams.destination,
-          mode: validatedParams.mode,
-        });
-        if (validatedParams.waypoints) {
-          dirParams.set("waypoints", validatedParams.waypoints.join("|"));
-        }
-        if (validatedParams.alternatives) {
-          dirParams.set("alternatives", "true");
-        }
-
-        url = `${GOOGLE_MAPS_BASE_URL}/directions/json?${dirParams}`;
-        break;
-      }
-
-      case "places": {
-        const parsed = MapsPlacesRequestSchema.safeParse(params);
-        if (!parsed.success) {
-          return proxyError(
-            `Validation error: ${parsed.error.errors[0]?.message}`,
-            "VALIDATION_ERROR",
-            400,
-          );
-        }
-        validatedParams = parsed.data;
-
-        const placesParams = new URLSearchParams({ key: googleMapsApiKey });
-        if (validatedParams.query)
-          placesParams.set("query", validatedParams.query);
-        if (validatedParams.location)
-          placesParams.set("location", validatedParams.location);
-        if (validatedParams.radius)
-          placesParams.set("radius", String(validatedParams.radius));
-        if (validatedParams.type)
-          placesParams.set("type", validatedParams.type);
-
-        url = `${GOOGLE_MAPS_BASE_URL}/place/textsearch/json?${placesParams}`;
-        break;
-      }
-
-      default:
-        return proxyError("Invalid operation", "VALIDATION_ERROR", 400);
-    }
-
-    const mapsResponse = await fetch(url);
-    const data = await mapsResponse.json();
-
-    if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-      await logProxyUsage({
-        apiKeyId,
-        projectId,
-        userId,
-        service: "maps",
-        operation,
-        creditsUsed: 0,
-        success: false,
-        errorCode: `MAPS_${data.status}`,
-        metadata: { operation, status: data.status },
-        latencyMs: Date.now() - startTime,
-      });
-
+    if (!operation) {
       return proxyError(
-        data.error_message || `Maps API error: ${data.status}`,
-        "MAPS_ERROR",
+        "Missing required field: operation",
+        "INVALID_REQUEST",
         400,
       );
     }
 
+    // Validate operation type
+    const validOperations = [
+      "geocode",
+      "reverseGeocode",
+      "directions",
+      "placeSearch",
+    ];
+    if (!validOperations.includes(operation)) {
+      return proxyError(
+        `Invalid operation. Must be one of: ${validOperations.join(", ")}`,
+        "INVALID_REQUEST",
+        400,
+      );
+    }
+
+    // Calculate credits (3 per request)
+    const creditsRequired = 3;
+
+    // Check credits
+    const creditsCheck = await checkCredits(
+      userId,
+      plan,
+      "maps",
+      creditsRequired,
+    );
+    if (!creditsCheck) {
+      return proxyError(
+        "Insufficient credits. Maps operations cost 3 credits per request.",
+        "INSUFFICIENT_CREDITS",
+        402,
+      );
+    }
+
+    // Execute maps operation
+    let result;
+    switch (operation) {
+      case "geocode":
+        result = await geocodeAddress(body.address);
+        break;
+      case "reverseGeocode":
+        result = await reverseGeocode(body.lat, body.lng);
+        break;
+      case "directions":
+        result = await getDirections(
+          body.origin,
+          body.destination,
+          body.mode || "driving",
+        );
+        break;
+      case "placeSearch":
+        result = await searchPlaces(body.query, body.location, body.radius);
+        break;
+      default:
+        return proxyError("Invalid operation", "INVALID_REQUEST", 400);
+    }
+
     // Deduct credits
-    const deduction = await deductCredits(userId, "maps", 1);
+    await deductCredits(userId, "maps", creditsRequired);
 
     // Log usage
     await logProxyUsage({
-      apiKeyId,
-      projectId,
-      userId,
-      service: "maps",
+      service: "maps" as const,
       operation,
-      creditsUsed: 1,
+      creditsUsed: creditsRequired,
+      requestSize: JSON.stringify(body).length,
+      responseSize: JSON.stringify(result).length,
+      latencyMs: Date.now() - startTime,
+      metadata: { operation, platform: body.platform },
       success: true,
-      metadata: {
-        operation,
-        resultsCount: data.results?.length || 0,
-      },
-      latencyMs: Date.now() - startTime,
-    });
-
-    return proxySuccess({
-      ...data,
-      creditsUsed: 1,
-      creditsRemaining: deduction.newBalance,
-    });
-  } catch (error) {
-    await logProxyUsage({
       apiKeyId,
       projectId,
       userId,
-      service: "maps",
-      operation,
-      creditsUsed: 0,
-      success: false,
-      errorCode: "NETWORK_ERROR",
-      metadata: { error: error instanceof Error ? error.message : "Unknown" },
-      latencyMs: Date.now() - startTime,
     });
 
+    return proxySuccess(result, creditsRequired);
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+
+    // Log failed request
+    await logProxyUsage({
+      service: "maps" as const,
+      operation: "unknown",
+      creditsUsed: 0,
+      requestSize: 0,
+      responseSize: 0,
+      latencyMs: Date.now() - startTime,
+      success: false,
+      errorCode: "INTERNAL_ERROR",
+      apiKeyId: auth.context!.apiKeyId,
+      projectId: auth.context!.projectId,
+      userId: auth.context!.userId,
+    });
+
+    console.error("[Maps Proxy] Error:", errorMessage, error);
     return proxyError(
-      "Failed to connect to Google Maps",
-      "SERVICE_UNAVAILABLE",
-      503,
+      `Maps service error: ${errorMessage}`,
+      "INTERNAL_ERROR",
+      500,
     );
   }
+}
+
+/**
+ * Geocode an address to coordinates
+ */
+async function geocodeAddress(address: string) {
+  if (!address) {
+    throw new Error("Address is required for geocoding");
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    // Fallback to mock data if no API key is configured
+    console.warn(
+      "[Maps] GOOGLE_MAPS_API_KEY not configured, returning mock data",
+    );
+    return {
+      address,
+      location: {
+        lat: 40.7128 + Math.random() * 0.01,
+        lng: -74.006 + Math.random() * 0.01,
+      },
+      formattedAddress: `${address}, New York, NY, USA`,
+      mock: true,
+    };
+  }
+
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
+  const response = await fetch(url);
+  const data = await response.json();
+
+  if (data.status !== "OK") {
+    throw new Error(`Geocoding failed: ${data.status}`);
+  }
+
+  const result = data.results[0];
+  return {
+    address,
+    location: result.geometry.location,
+    formattedAddress: result.formatted_address,
+    placeId: result.place_id,
+  };
+}
+
+/**
+ * Reverse geocode coordinates to address
+ */
+async function reverseGeocode(lat: number, lng: number) {
+  if (!lat || !lng) {
+    throw new Error("Latitude and longitude are required");
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    console.warn(
+      "[Maps] GOOGLE_MAPS_API_KEY not configured, returning mock data",
+    );
+    return {
+      location: { lat, lng },
+      formattedAddress: "123 Mock Street, New York, NY 10001, USA",
+      mock: true,
+    };
+  }
+
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+  const response = await fetch(url);
+  const data = await response.json();
+
+  if (data.status !== "OK") {
+    throw new Error(`Reverse geocoding failed: ${data.status}`);
+  }
+
+  const result = data.results[0];
+  return {
+    location: { lat, lng },
+    formattedAddress: result.formatted_address,
+    placeId: result.place_id,
+    addressComponents: result.address_components,
+  };
+}
+
+/**
+ * Get directions between two points
+ */
+async function getDirections(
+  origin: string,
+  destination: string,
+  mode: string = "driving",
+) {
+  if (!origin || !destination) {
+    throw new Error("Origin and destination are required");
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    console.warn(
+      "[Maps] GOOGLE_MAPS_API_KEY not configured, returning mock data",
+    );
+    return {
+      origin,
+      destination,
+      mode,
+      distance: { text: "5.2 mi", value: 8370 },
+      duration: { text: "15 mins", value: 900 },
+      mock: true,
+    };
+  }
+
+  const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=${mode}&key=${apiKey}`;
+  const response = await fetch(url);
+  const data = await response.json();
+
+  if (data.status !== "OK") {
+    throw new Error(`Directions failed: ${data.status}`);
+  }
+
+  const route = data.routes[0];
+  const leg = route.legs[0];
+
+  return {
+    origin,
+    destination,
+    mode,
+    distance: leg.distance,
+    duration: leg.duration,
+    steps: leg.steps.map((step: any) => ({
+      instruction: step.html_instructions.replace(/<[^>]*>/g, ""),
+      distance: step.distance,
+      duration: step.duration,
+    })),
+    polyline: route.overview_polyline.points,
+  };
+}
+
+/**
+ * Search for places
+ */
+async function searchPlaces(
+  query: string,
+  location?: string,
+  radius: number = 5000,
+) {
+  if (!query) {
+    throw new Error("Query is required for place search");
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    console.warn(
+      "[Maps] GOOGLE_MAPS_API_KEY not configured, returning mock data",
+    );
+    return {
+      query,
+      results: [
+        {
+          name: `${query} - Mock Result`,
+          address: "123 Mock Street, New York, NY 10001",
+          location: { lat: 40.7128, lng: -74.006 },
+          rating: 4.5,
+          mock: true,
+        },
+      ],
+    };
+  }
+
+  let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}`;
+
+  if (location) {
+    url += `&location=${location}&radius=${radius}`;
+  }
+
+  const response = await fetch(url);
+  const data = await response.json();
+
+  if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+    throw new Error(`Place search failed: ${data.status}`);
+  }
+
+  return {
+    query,
+    results: data.results.map((place: any) => ({
+      name: place.name,
+      address: place.formatted_address,
+      location: place.geometry.location,
+      placeId: place.place_id,
+      rating: place.rating,
+      types: place.types,
+    })),
+  };
 }

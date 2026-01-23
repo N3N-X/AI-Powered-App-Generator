@@ -29,8 +29,11 @@ import {
   RefreshCw,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
   X,
   File,
+  Folder,
+  FolderOpen,
   Maximize2,
   Minimize2,
   FolderTree,
@@ -40,6 +43,11 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { ChatMessage } from "@/types";
+
+// File tree node type for recursive structure
+type FileTreeNode = {
+  [key: string]: FileTreeNode | string[] | undefined;
+};
 
 interface WebWorkspaceProps {
   className?: string;
@@ -70,6 +78,9 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [openTabs, setOpenTabs] = useState<string[]>([]);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    new Set(["src"]),
+  );
   const [pendingSpec, setPendingSpec] = useState<{
     name: string;
     description: string;
@@ -502,6 +513,115 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
     setCurrentFile(filePath);
     setShowCodeEditor(true);
   };
+
+  const toggleFolder = (folderPath: string) => {
+    setExpandedFolders((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(folderPath)) {
+        newSet.delete(folderPath);
+      } else {
+        newSet.add(folderPath);
+      }
+      return newSet;
+    });
+  };
+
+  // Build file tree structure
+  const fileTree = useMemo((): FileTreeNode => {
+    if (!currentProject?.codeFiles) return {};
+
+    const tree: FileTreeNode = {};
+    const files = Object.keys(currentProject.codeFiles);
+
+    files.forEach((filePath) => {
+      const parts = filePath.split("/");
+      let current: FileTreeNode = tree;
+
+      parts.forEach((part, index) => {
+        if (index === parts.length - 1) {
+          const files = current._files as string[] | undefined;
+          if (!files) current._files = [];
+          (current._files as string[]).push(filePath);
+        } else {
+          if (!current[part]) current[part] = {};
+          current = current[part] as FileTreeNode;
+        }
+      });
+    });
+
+    return tree;
+  }, [currentProject?.codeFiles]);
+
+  // Render file tree
+  const renderFileTree = useCallback(
+    (tree: FileTreeNode, basePath = ""): React.ReactNode[] => {
+      const items: React.ReactNode[] = [];
+
+      Object.keys(tree).forEach((key) => {
+        if (key === "_files") return;
+
+        const folderPath = basePath ? `${basePath}/${key}` : key;
+        const isExpanded = expandedFolders.has(folderPath);
+
+        items.push(
+          <div key={folderPath}>
+            <button
+              onClick={() => toggleFolder(folderPath)}
+              className="w-full flex items-center gap-1.5 px-2 py-1 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded transition-colors"
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+              {isExpanded ? (
+                <FolderOpen className="h-4 w-4 text-violet-400" />
+              ) : (
+                <Folder className="h-4 w-4 text-violet-400" />
+              )}
+              <span>{key}</span>
+            </button>
+            {isExpanded && (
+              <div className="ml-4 border-l border-white/10 pl-2">
+                {renderFileTree(tree[key] as FileTreeNode, folderPath)}
+              </div>
+            )}
+          </div>,
+        );
+      });
+
+      const filesInTree = tree._files as string[] | undefined;
+      if (filesInTree) {
+        filesInTree.forEach((filePath: string) => {
+          const fileName = filePath.split("/").pop() || filePath;
+          const isActive = currentFile === filePath;
+          const isOpen = openTabs.includes(filePath);
+
+          items.push(
+            <button
+              key={filePath}
+              onClick={() => openFileInEditor(filePath)}
+              className={cn(
+                "w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-2 transition-colors",
+                isActive
+                  ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
+                  : "text-slate-400 hover:text-white hover:bg-white/5",
+              )}
+            >
+              <File className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{fileName}</span>
+              {isOpen && (
+                <div className="w-1.5 h-1.5 rounded-full bg-violet-400 ml-auto" />
+              )}
+            </button>,
+          );
+        });
+      }
+
+      return items;
+    },
+    [expandedFolders, currentFile, openTabs],
+  );
 
   // Platform-specific quick prompts
   const getQuickPrompts = () => {
@@ -991,33 +1111,7 @@ export function WebWorkspace({ className }: WebWorkspaceProps) {
                     </div>
                     <ScrollArea className="flex-1">
                       <div className="p-2 space-y-0.5">
-                        {Object.keys(currentProject.codeFiles || {}).map(
-                          (filePath) => {
-                            const fileName =
-                              filePath.split("/").pop() || filePath;
-                            const isActive = filePath === currentFile;
-                            const isOpen = openTabs.includes(filePath);
-
-                            return (
-                              <button
-                                key={filePath}
-                                onClick={() => openFileInEditor(filePath)}
-                                className={cn(
-                                  "w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-2 transition-colors",
-                                  isActive
-                                    ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
-                                    : "text-slate-400 hover:text-white hover:bg-white/5",
-                                )}
-                              >
-                                <File className="h-3.5 w-3.5 shrink-0" />
-                                <span className="truncate">{fileName}</span>
-                                {isOpen && (
-                                  <div className="w-1.5 h-1.5 rounded-full bg-violet-400 ml-auto" />
-                                )}
-                              </button>
-                            );
-                          },
-                        )}
+                        {renderFileTree(fileTree)}
                       </div>
                     </ScrollArea>
                   </div>

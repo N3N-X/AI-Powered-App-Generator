@@ -220,7 +220,7 @@ export const payments = {
 
   if (externalApis.includes("maps")) {
     services.push(`
-// Maps
+// Maps & Geocoding
 export const maps = {
   geocode: async (address: string) => {
     const res = await fetch(\`\${API_BASE}/api/proxy/maps\`, {
@@ -229,10 +229,52 @@ export const maps = {
     });
     return res.json();
   },
-  directions: async (origin: string, destination: string) => {
+  reverseGeocode: async (lat: number, lng: number) => {
     const res = await fetch(\`\${API_BASE}/api/proxy/maps\`, {
       method: 'POST', headers,
-      body: JSON.stringify({ operation: 'directions', origin, destination })
+      body: JSON.stringify({ operation: 'reverseGeocode', lat, lng })
+    });
+    return res.json();
+  },
+  directions: async (origin: string, destination: string, mode: string = 'driving') => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/maps\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'directions', origin, destination, mode })
+    });
+    return res.json();
+  },
+  searchPlaces: async (query: string, location?: string, radius?: number) => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/maps\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'placeSearch', query, location, radius })
+    });
+    return res.json();
+  }
+};`);
+  }
+
+  if (externalApis.includes("weather")) {
+    services.push(`
+// Weather Data
+export const weather = {
+  current: async (location?: string, lat?: number, lon?: number, units: string = 'metric') => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/weather\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'current', location, lat, lon, units })
+    });
+    return res.json();
+  },
+  forecast: async (location?: string, lat?: number, lon?: number, units: string = 'metric') => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/weather\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'forecast', location, lat, lon, units })
+    });
+    return res.json();
+  },
+  hourly: async (location?: string, lat?: number, lon?: number, units: string = 'metric') => {
+    const res = await fetch(\`\${API_BASE}/api/proxy/weather\`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ operation: 'hourly', location, lat, lon, units })
     });
     return res.json();
   }
@@ -604,11 +646,24 @@ export function buildIOSWorkerPrompt(apiBaseUrl: string): string {
   return `You are the RUX iOS Agent. Generate beautiful, FULLY-FEATURED, ERROR-FREE React Native + Expo code for iOS.
 
 ## BUILD COMPLETE APPS - NOT MINIMAL DEMOS
+CRITICAL REQUIREMENTS:
 - Users expect PRODUCTION-READY apps, not basic demos
 - Include ALL screens from the spec - implement every single one
+- NO PLACEHOLDERS - every feature must be fully implemented
+- NO SAMPLE DATA - use real API calls with proper data fetching
+- NO TODO COMMENTS - complete all functionality now
 - Add real functionality: data fetching, state management, navigation
 - Include proper loading states, error handling, empty states
 - Make it look professional with polished UI/UX
+- Every button must do something real, every screen must be functional
+- Use actual API calls to backend services (db, auth, etc.)
+
+ABSOLUTELY FORBIDDEN:
+❌ Placeholder text like "Add your content here"
+❌ TODO comments or "implement later" notes
+❌ Fake/mock data hardcoded in components
+❌ Non-functional buttons or forms
+❌ Empty screens with "Coming soon"
 
 CRITICAL: Your code MUST work without errors. Only use packages from the ALLOWED list.
 
@@ -756,9 +811,57 @@ import { LinearGradient } from 'expo-linear-gradient';
 - Glassmorphism with BlurView for cards and overlays
 - Large titles, rounded corners (16-20px)
 - Safe area support with useSafeAreaInsets
-- Haptic feedback: Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-- Tab bar with icons at bottom
+- Haptic feedback (ALWAYS import and use try-catch):
+
+  import * as Haptics from 'expo-haptics';
+
+  // Use in event handlers with error handling:
+  const handlePress = async () => {
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {
+      // Haptics may not be available in all environments
+    }
+    // ... rest of handler
+  };
+
+- Tab bar with icons at bottom (use liquid glass style - see below)
 - Smooth animations and transitions
+
+## iOS LIQUID GLASS BOTTOM TAB NAVIGATION
+For iOS apps, use floating glassmorphic bottom tab bar:
+
+\`\`\`typescript
+import { BlurView } from 'expo-blur';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+
+<Tab.Navigator
+  screenOptions={{
+    tabBarStyle: {
+      position: 'absolute',
+      bottom: 20,
+      left: 20,
+      right: 20,
+      borderRadius: 25,
+      height: 70,
+      backgroundColor: 'transparent',
+      borderTopWidth: 0,
+      elevation: 0,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.3,
+      shadowRadius: 20,
+    },
+    tabBarBackground: () => (
+      <BlurView intensity={90} style={StyleSheet.absoluteFill} tint="dark" />
+    ),
+    tabBarActiveTintColor: '#8B5CF6',
+    tabBarInactiveTintColor: '#94A3B8',
+  }}
+>
+  {/* Your tab screens */}
+</Tab.Navigator>
+\`\`\`
 
 ## API SERVICES (import from src/services/api.ts)
 DO NOT generate src/services/api.ts - it will be provided automatically.
@@ -795,11 +898,24 @@ export function buildAndroidWorkerPrompt(apiBaseUrl: string): string {
   return `You are the RUX Android Agent. Generate beautiful, FULLY-FEATURED, ERROR-FREE React Native + Expo code for Android.
 
 ## BUILD COMPLETE APPS - NOT MINIMAL DEMOS
+CRITICAL REQUIREMENTS:
 - Users expect PRODUCTION-READY apps, not basic demos
 - Include ALL screens from the spec - implement every single one
+- NO PLACEHOLDERS - every feature must be fully implemented
+- NO SAMPLE DATA - use real API calls with proper data fetching
+- NO TODO COMMENTS - complete all functionality now
 - Add real functionality: data fetching, state management, navigation
 - Include proper loading states, error handling, empty states
 - Make it look professional with polished UI/UX
+- Every button must do something real, every screen must be functional
+- Use actual API calls to backend services (db, auth, etc.)
+
+ABSOLUTELY FORBIDDEN:
+❌ Placeholder text like "Add your content here"
+❌ TODO comments or "implement later" notes
+❌ Fake/mock data hardcoded in components
+❌ Non-functional buttons or forms
+❌ Empty screens with "Coming soon"
 
 CRITICAL: Your code MUST work without errors. Only use packages from the ALLOWED list.
 
@@ -901,12 +1017,55 @@ export default function App() {
 - bookmark (Saved)
 
 ## ANDROID DESIGN (Material Design 3)
-- Use elevation for shadows: { elevation: 4 }
-- Ripple effects: <Pressable android_ripple={{ color: 'rgba(0,0,0,0.1)' }}>
-- Rounded corners (12-16px)
-- FAB for primary actions
-- Tab bar with icons at bottom
-- Material color scheme
+- Use elevation for shadows: { elevation: 4, backgroundColor: '#fff' }
+- Ripple effects on ALL touchables: <Pressable android_ripple={{ color: 'rgba(0,0,0,0.1)' }}>
+- Rounded corners (12-16px for cards, 24px for buttons)
+- FAB (Floating Action Button) for primary actions:
+
+  <TouchableOpacity
+    style={{
+      position: 'absolute',
+      bottom: 24,
+      right: 24,
+      width: 56,
+      height: 56,
+      borderRadius: 16,
+      backgroundColor: '#6200EE',
+      elevation: 6,
+      justifyContent: 'center',
+      alignItems: 'center',
+    }}
+    onPress={handleAction}
+  >
+    <MaterialIcons name="add" size={24} color="#fff" />
+  </TouchableOpacity>
+
+- Bottom Navigation Bar (use elevated style with proper shadows):
+
+  <Tab.Navigator
+    screenOptions={{
+      tabBarStyle: {
+        height: 65,
+        paddingBottom: 8,
+        paddingTop: 8,
+        backgroundColor: '#fff',
+        borderTopWidth: 0,
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      tabBarActiveTintColor: '#6200EE',
+      tabBarInactiveTintColor: '#666',
+      tabBarLabelStyle: { fontSize: 12, fontWeight: '500' },
+    }}
+  >
+    {/* Your tab screens */}
+  </Tab.Navigator>
+
+- Material color scheme (use dynamic theming)
+- Use MaterialIcons from @expo/vector-icons throughout
 
 ## LinearGradient USAGE (use instead of BlurView on Android)
 \`\`\`typescript
@@ -958,6 +1117,26 @@ export function buildWebWorkerPrompt(apiBaseUrl: string): string {
   return `You are the RUX Web Agent. Generate beautiful React code for web browsers.
 
 ${buildProxyDocs(apiBaseUrl)}
+
+## BUILD COMPLETE APPS - NOT MINIMAL DEMOS
+CRITICAL REQUIREMENTS:
+- Users expect PRODUCTION-READY apps, not basic demos
+- Include ALL pages/screens from the spec - implement every single one
+- NO PLACEHOLDERS - every feature must be fully implemented
+- NO SAMPLE DATA - use real API calls with proper data fetching
+- NO TODO COMMENTS - complete all functionality now
+- Add real functionality: data fetching, state management, routing
+- Include proper loading states, error handling, empty states
+- Make it look professional with polished UI/UX
+- Every button must do something real, every form must be functional
+- Use actual API calls to backend services (db, auth, etc.)
+
+ABSOLUTELY FORBIDDEN:
+❌ Placeholder text like "Add your content here"
+❌ TODO comments or "implement later" notes
+❌ Fake/mock data hardcoded in components
+❌ Non-functional buttons or forms
+❌ Empty pages with "Coming soon"
 
 ## CRITICAL WEB RULES
 - DO NOT import from 'react-native' - use HTML elements

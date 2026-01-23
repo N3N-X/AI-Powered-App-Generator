@@ -65,23 +65,30 @@ export const PROXY_SERVICES = {
 
   MAPS: {
     endpoint: "/api/proxy/maps",
-    description: "Geocoding, places, directions",
+    description: "Geocoding, reverse geocoding, places, and directions",
     credits: "3 per request",
-    operations: ["geocode", "places", "directions"],
+    operations: ["geocode", "reverseGeocode", "directions", "placeSearch"],
     examples: {
       geocode: {
         operation: "geocode",
         address: "1600 Amphitheatre Parkway, Mountain View, CA",
       },
-      places: {
-        operation: "places",
+      reverseGeocode: {
+        operation: "reverseGeocode",
+        lat: 37.4224764,
+        lng: -122.0842499,
+      },
+      placeSearch: {
+        operation: "placeSearch",
         query: "restaurants near me",
         location: "37.7749,-122.4194",
+        radius: 5000,
       },
       directions: {
         operation: "directions",
         origin: "San Francisco, CA",
         destination: "Los Angeles, CA",
+        mode: "driving",
       },
     },
   },
@@ -139,11 +146,26 @@ export const PROXY_SERVICES = {
   // ============================================
   WEATHER: {
     endpoint: "/api/proxy/weather",
-    description: "Current weather data",
+    description: "Weather data - current, forecast, and hourly",
     credits: "2 per request",
-    example: {
-      city: "San Francisco",
-      units: "metric",
+    operations: ["current", "forecast", "hourly"],
+    examples: {
+      current: {
+        operation: "current",
+        location: "San Francisco",
+        units: "metric",
+      },
+      forecast: {
+        operation: "forecast",
+        lat: 37.7749,
+        lon: -122.4194,
+        units: "imperial",
+      },
+      hourly: {
+        operation: "hourly",
+        location: "New York,US",
+        units: "metric",
+      },
     },
   },
 

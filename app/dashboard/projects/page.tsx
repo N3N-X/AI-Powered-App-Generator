@@ -44,6 +44,7 @@ export default function ProjectsPage() {
   const { setUser, setConnectedServices } = useUserStore();
   const { openModal } = useUIStore();
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"updated" | "created" | "name">(
@@ -51,25 +52,53 @@ export default function ProjectsPage() {
   );
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     async function fetchData() {
+      setError(null);
       try {
-        const userResponse = await fetch("/api/user");
-        if (userResponse.ok) {
-          const userData = await userResponse.json();
-          setUser(userData.user);
-          setConnectedServices({
-            github: userData.user.hasGitHub,
-            customApiKey: userData.user.hasCustomApiKey,
-          });
+        const userResponse = await fetch("/api/user", {
+          signal: abortController.signal,
+        });
+        if (!userResponse.ok) {
+          throw new Error(
+            `Failed to load user: ${userResponse.status} ${userResponse.statusText}`,
+          );
+        }
+        const userData = await userResponse.json();
+        setUser(userData.user);
+        setConnectedServices({
+          github: userData.user.hasGitHub,
+          customApiKey: userData.user.hasCustomApiKey,
+        });
+
+        const projectsResponse = await fetch("/api/projects", {
+          signal: abortController.signal,
+        });
+        if (!projectsResponse.ok) {
+          throw new Error(
+            `Failed to load projects: ${projectsResponse.status} ${projectsResponse.statusText}`,
+          );
+        }
+        const data = await projectsResponse.json();
+        setProjects(data.projects || []);
+      } catch (error) {
+        // Ignore aborted requests (component unmounted)
+        if (error instanceof Error && error.name === "AbortError") {
+          console.log("[ProjectsPage] Fetch aborted (component unmounted)");
+          return;
         }
 
-        const projectsResponse = await fetch("/api/projects");
-        if (projectsResponse.ok) {
-          const data = await projectsResponse.json();
-          setProjects(data.projects || []);
-        }
-      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to load dashboard";
         console.error("Failed to fetch data:", error);
+        setError(message);
+
+        toast({
+          title: "Failed to load data",
+          description: message,
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
@@ -78,6 +107,10 @@ export default function ProjectsPage() {
     if (!authLoading && authUser) {
       fetchData();
     }
+
+    return () => {
+      abortController.abort();
+    };
   }, [authUser, authLoading, setProjects, setUser, setConnectedServices]);
 
   const handleOpenProject = async (projectId: string) => {
@@ -178,6 +211,12 @@ export default function ProjectsPage() {
     project.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  const handleRetry = () => {
+    setIsLoading(true);
+    setError(null);
+    window.location.reload();
+  };
+
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -187,6 +226,37 @@ export default function ProjectsPage() {
             Loading your projects...
           </p>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Card className="max-w-md glass border-red-500/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-500">
+              <ExternalLink className="h-5 w-5" />
+              Failed to Load Dashboard
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              {error}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Button onClick={handleRetry} className="flex-1">
+                Try Again
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/dashboard")}
+              >
+                Go to Dashboard
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -208,7 +278,35 @@ export default function ProjectsPage() {
               total
             </p>
           </div>
-          <Button onClick={() => openModal("new-project")} className="gap-2">
+          <Button
+            onClick={async () => {
+              try {
+                const response = await fetch("/api/projects", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    name: `Project ${projects.length + 1}`,
+                    platform: "WEB",
+                  }),
+                });
+
+                if (!response.ok) {
+                  throw new Error("Failed to create project");
+                }
+
+                const data = await response.json();
+                router.push(`/dashboard/generate/${data.project.id}`);
+              } catch (error) {
+                toast({
+                  title: "Failed to create project",
+                  description:
+                    error instanceof Error ? error.message : "Please try again",
+                  variant: "destructive",
+                });
+              }
+            }}
+            className="gap-2"
+          >
             <Plus className="h-4 w-4" />
             New Project
           </Button>

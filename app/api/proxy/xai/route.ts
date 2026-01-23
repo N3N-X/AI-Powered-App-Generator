@@ -157,10 +157,23 @@ export async function POST(request: NextRequest) {
     });
 
     if (!xaiResponse.ok) {
-      const errorData = await xaiResponse.json().catch(() => ({}));
-      const errorMessage =
-        (errorData as { error?: { message?: string } })?.error?.message ||
-        "xAI API error";
+      let errorMessage = "xAI API error";
+      let errorData: any = {};
+
+      try {
+        errorData = await xaiResponse.json();
+        errorMessage =
+          errorData?.error?.message ||
+          `xAI returned ${xaiResponse.status}: ${xaiResponse.statusText}`;
+      } catch (parseError) {
+        // Response might be HTML error page or plain text
+        const text = await xaiResponse.text().catch(() => "");
+        errorMessage =
+          text ||
+          xaiResponse.statusText ||
+          `xAI API error (${xaiResponse.status})`;
+        console.error("[xAI Proxy] Non-JSON error response:", text);
+      }
 
       await logProxyUsage({
         apiKeyId,
@@ -171,7 +184,11 @@ export async function POST(request: NextRequest) {
         creditsUsed: 0,
         success: false,
         errorCode: `XAI_${xaiResponse.status}`,
-        metadata: { model: xaiModel, messageCount: messages.length },
+        metadata: {
+          model: xaiModel,
+          messageCount: messages.length,
+          errorMessage,
+        },
         latencyMs: Date.now() - startTime,
       });
 

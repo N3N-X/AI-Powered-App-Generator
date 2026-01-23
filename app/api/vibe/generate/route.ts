@@ -223,10 +223,26 @@ export async function POST(request: NextRequest) {
           if (hasExistingAppCode) {
             sendUpdate({
               phase: "building",
+              message: "Analyzing existing code",
+              icon: "🔍",
+              progress: 10,
+              detail: "Understanding your current app structure...",
+            });
+
+            sendUpdate({
+              phase: "building",
+              message: "Planning changes",
+              icon: "📝",
+              progress: 20,
+              detail: "Determining what needs to be updated...",
+            });
+
+            sendUpdate({
+              phase: "building",
               message: "Updating your app",
               icon: "🔨",
               progress: 30,
-              detail: "Applying changes...",
+              detail: "Applying your requested changes...",
             });
 
             // For refinements, create a simple spec based on existing code
@@ -284,22 +300,24 @@ export async function POST(request: NextRequest) {
               project_id: project.id,
             });
 
-            // Deduct credits
+            // Deduct credits and return new balance
+            const newCredits = user.credits - creditCost;
             await supabase
               .from("users")
               .update({
-                credits: user.credits - creditCost,
+                credits: newCredits,
                 total_credits_used: (user.total_credits_used || 0) + creditCost,
               })
               .eq("id", user.id);
 
             await incrementUsage(user.id);
 
-            // Send completion
+            // Send completion with server's credit balance
             const completeData = `data: ${JSON.stringify({
               type: "complete",
               success: true,
               codeFiles: buildResult.files,
+              creditsRemaining: newCredits,
               message: `Updated ${Object.keys(buildResult.files).length} file(s)`,
             })}\n\n`;
             controller.enqueue(encoder.encode(completeData));
@@ -309,89 +327,27 @@ export async function POST(request: NextRequest) {
             return;
           }
 
-          // NEW APP: Go through planning and confirmation flow
-          // Step 1: Plan the app
+          // NEW APP: Plan and wait for user confirmation
+          // Step 1: Plan the app and show spec for review
           const planResult = await orchestratePlan(context, sendUpdate);
 
           if (!planResult.success || !planResult.spec) {
-            throw new Error("Planning failed");
+            const errorMsg =
+              "AI planning failed. This could be due to API rate limits or service issues. Please try again in a moment.";
+
+            sendUpdate({
+              phase: "error",
+              message: "Planning failed",
+              icon: "❌",
+              progress: 0,
+              detail: errorMsg,
+            });
+
+            throw new Error(errorMsg);
           }
 
-          // If quickMode is false, stop here and wait for confirmation
-          // The orchestratePlan already sent the awaiting_confirmation phase with appSpec
-          // Frontend will call /api/vibe/build with the confirmed spec
-          if (!data.quickMode) {
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            controller.close();
-            return;
-          }
-
-          // Quick mode: continue building without confirmation
-          sendUpdate({
-            phase: "building",
-            message: "Building your app",
-            icon: "🔨",
-            progress: 30,
-            detail: "Starting code generation...",
-          });
-
-          const buildResult = await orchestrateBuild(
-            planResult.spec,
-            context,
-            sendUpdate,
-          );
-
-          if (!buildResult.success) {
-            throw new Error("Build failed");
-          }
-
-          // Merge generated files with existing files
-          const updatedCodeFiles = {
-            ...existingCode,
-            ...buildResult.files,
-          };
-
-          // Update project in database
-          await supabase
-            .from("projects")
-            .update({
-              code_files: updatedCodeFiles,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", project.id);
-
-          // Save prompt history
-          await supabase.from("prompt_history").insert({
-            prompt: data.prompt,
-            response: JSON.stringify(buildResult.files),
-            model: "grok",
-            tokens: 0,
-            user_id: user.id,
-            project_id: project.id,
-          });
-
-          // Deduct credits from user
-          await supabase
-            .from("users")
-            .update({
-              credits: user.credits - creditCost,
-              total_credits_used: (user.total_credits_used || 0) + creditCost,
-            })
-            .eq("id", user.id);
-
-          // Increment rate limit counter
-          await incrementUsage(user.id);
-
-          // Send completion
-          const completeData = `data: ${JSON.stringify({
-            type: "complete",
-            success: true,
-            codeFiles: buildResult.files,
-            message: `Generated ${Object.keys(buildResult.files).length} file(s)`,
-          })}\n\n`;
-          controller.enqueue(encoder.encode(completeData));
-
-          // Send done signal
+          // Wait for user confirmation via /api/vibe/build
+          // The orchestratePlan already sent awaiting_confirmation with appSpec
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
         } catch (error) {

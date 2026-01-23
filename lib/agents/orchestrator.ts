@@ -1,11 +1,13 @@
 /**
- * Multi-Agent Orchestrator
+ * Multi-Agent Orchestrator with Intelligent Model Routing
  *
  * Flow:
- * 1. Orchestrator (grok-4-1-fast-reasoning) - Plans the app
- * 2. Workers (grok-code-fast-1) - Generate code in parallel
- * 3. Critic (claude-haiku) - Validates before showing to user
- * 4. Fixer (grok-code-fast-1) - Auto-fixes any errors (max 3 loops)
+ * 1. Analyze task complexity
+ * 2. Route to appropriate models based on complexity
+ * 3. Orchestrator - Plans the app (Grok Fast or Sonnet)
+ * 4. Workers - Generate code (Grok Code Fast or Sonnet)
+ * 5. Critic - Validates code (Grok Fast, Haiku, or Sonnet)
+ * 6. Fixer - Auto-fixes errors (Grok Code Fast)
  */
 
 import {
@@ -14,6 +16,7 @@ import {
   StreamUpdate,
   CriticResult,
   GenerationContext,
+  TaskComplexity,
 } from "./types";
 import {
   buildOrchestratorPrompt,
@@ -23,10 +26,15 @@ import {
   buildApiServiceCode,
   buildApiServiceCodeForSpec,
 } from "./prompts";
+import {
+  analyzeTaskComplexity,
+  getModelsForComplexity,
+  getComplexityDescription,
+} from "./model-router";
 import Anthropic from "@anthropic-ai/sdk";
 
-// Model configurations
-const MODELS = {
+// Default model configurations (can be overridden by complexity analysis)
+const DEFAULT_MODELS = {
   orchestrator: "grok-4-1-fast-reasoning",
   worker: "grok-code-fast-1",
   critic: "claude-haiku-4-5-20251001",
@@ -67,12 +75,34 @@ async function callXAI(
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`xAI API error: ${error}`);
+    let errorMessage = `xAI API error (${response.status}): ${response.statusText}`;
+
+    try {
+      const errorData = await response.json();
+      errorMessage =
+        errorData?.error?.message ||
+        errorData?.message ||
+        JSON.stringify(errorData);
+    } catch {
+      const errorText = await response.text().catch(() => "");
+      if (errorText) {
+        errorMessage = errorText;
+      }
+    }
+
+    console.error("[xAI] API error:", errorMessage);
+    throw new Error(`xAI API error: ${errorMessage}`);
   }
 
   const data = await response.json();
-  return data.choices[0]?.message?.content || "";
+  const content = data.choices?.[0]?.message?.content;
+
+  if (!content) {
+    console.error("[xAI] Empty response:", data);
+    throw new Error("xAI returned empty response");
+  }
+
+  return content;
 }
 
 /**
@@ -124,13 +154,17 @@ function parseJSON<T>(content: string): T {
 async function planApp(
   context: GenerationContext,
   onStream: StreamCallback,
+  complexity: TaskComplexity,
 ): Promise<AppSpec> {
+  // Get appropriate models for this complexity level
+  const models = getModelsForComplexity(complexity);
+
   onStream({
     phase: "planning",
     message: "Planning your app",
     icon: "🎯",
-    progress: 10,
-    detail: "Analyzing requirements...",
+    progress: 5,
+    detail: `Using ${models.orchestrator} for planning...`,
   });
 
   const systemPrompt = buildOrchestratorPrompt(context.apiBaseUrl);
@@ -140,22 +174,39 @@ Target platforms: ${context.platforms.join(", ")}
 
 ${context.existingCode ? `Existing code to refine:\n${JSON.stringify(context.existingCode, null, 2)}` : ""}`;
 
-  const response = await callXAI(
-    MODELS.orchestrator,
-    systemPrompt,
-    userPrompt,
-    8192,
-  );
+  onStream({
+    phase: "planning",
+    message: "Thinking about your app",
+    icon: "🤔",
+    progress: 10,
+    detail: "Designing app structure and features...",
+  });
+
+  // Use complexity-appropriate model for orchestration
+  const isClaudeModel = models.orchestrator.includes("claude");
+  const response = isClaudeModel
+    ? await callClaude(models.orchestrator, systemPrompt, userPrompt, 8192)
+    : await callXAI(models.orchestrator, systemPrompt, userPrompt, 8192);
+
+  onStream({
+    phase: "planning",
+    message: "Planning screens and navigation",
+    icon: "🗺️",
+    progress: 15,
+    detail: "Organizing user flows...",
+  });
+
+  const spec = parseJSON<AppSpec>(response);
 
   onStream({
     phase: "planning",
     message: "App architecture ready",
     icon: "✅",
     progress: 20,
-    detail: "Defined screens and features",
+    detail: `Designed ${spec.screens.length} screens with ${spec.features.length} features`,
   });
 
-  return parseJSON<AppSpec>(response);
+  return spec;
 }
 
 /**
@@ -165,13 +216,17 @@ async function generateCode(
   spec: AppSpec,
   context: GenerationContext,
   onStream: StreamCallback,
+  complexity: TaskComplexity,
 ): Promise<Record<string, string>> {
+  // Get appropriate models for this complexity level
+  const models = getModelsForComplexity(complexity);
+
   onStream({
     phase: "building",
-    message: "Building your app",
+    message: "Starting code generation",
     icon: "🔨",
-    progress: 30,
-    detail: "Generating components...",
+    progress: 25,
+    detail: `Using ${models.worker} for code generation...`,
   });
 
   const allFiles: Record<string, string> = {};
@@ -220,18 +275,33 @@ Return complete, working code as JSON.`;
 
   onStream({
     phase: "building",
-    message: "Generating UI",
+    message: "Building UI components",
     icon: "🎨",
-    progress: 50,
-    detail: "Creating screens and components...",
+    progress: 35,
+    detail: `Creating ${spec.screens.length} screens...`,
   });
 
-  const response = await callXAI(
-    MODELS.worker,
-    workerPrompt,
-    userPrompt,
-    32768,
-  );
+  onStream({
+    phase: "building",
+    message: "Writing code",
+    icon: "💻",
+    progress: 45,
+    detail: "AI is generating React components...",
+  });
+
+  // Use complexity-appropriate model for code generation
+  const isClaudeModel = models.worker.includes("claude");
+  const response = isClaudeModel
+    ? await callClaude(models.worker, workerPrompt, userPrompt, 32768)
+    : await callXAI(models.worker, workerPrompt, userPrompt, 32768);
+
+  onStream({
+    phase: "building",
+    message: "Processing generated code",
+    icon: "⚙️",
+    progress: 60,
+    detail: "Organizing files...",
+  });
 
   try {
     const files = parseJSON<Record<string, string>>(response);
@@ -240,6 +310,14 @@ Return complete, working code as JSON.`;
     console.error("Failed to parse worker response:", e);
     throw new Error("Failed to generate code");
   }
+
+  onStream({
+    phase: "building",
+    message: "Configuring API services",
+    icon: "🔌",
+    progress: 70,
+    detail: "Setting up API integrations...",
+  });
 
   // ALWAYS inject our api.ts - replace any AI-generated version
   // This ensures correct API_BASE URL, API key, and only needed services
@@ -255,10 +333,10 @@ Return complete, working code as JSON.`;
 
   onStream({
     phase: "building",
-    message: "Code generated",
+    message: "Code generation complete",
     icon: "✅",
-    progress: 70,
-    detail: `Created ${Object.keys(allFiles).length} files`,
+    progress: 80,
+    detail: `Generated ${Object.keys(allFiles).length} files successfully`,
   });
 
   return allFiles;
@@ -440,9 +518,33 @@ function ensureConfigFiles(
 export async function orchestratePlan(
   context: GenerationContext,
   onStream: StreamCallback,
-): Promise<{ spec: AppSpec | null; success: boolean }> {
+): Promise<{
+  spec: AppSpec | null;
+  success: boolean;
+  complexity?: TaskComplexity;
+}> {
   try {
-    const spec = await planApp(context, onStream);
+    // Analyze task complexity
+    const complexity = analyzeTaskComplexity(
+      context.userPrompt,
+      context.existingCode,
+    );
+    const complexityDesc = getComplexityDescription(complexity);
+
+    console.log(
+      `[Orchestrator] Task complexity: ${complexity} - ${complexityDesc}`,
+    );
+
+    // Inform user about complexity and model selection
+    onStream({
+      phase: "planning",
+      message: "Analyzing task complexity",
+      icon: "🔍",
+      progress: 2,
+      detail: complexityDesc,
+    });
+
+    const spec = await planApp(context, onStream, complexity);
 
     console.log("Planning complete, sending spec for confirmation:", spec.name);
 
@@ -456,16 +558,19 @@ export async function orchestratePlan(
       appSpec: spec,
     });
 
-    return { spec, success: true };
+    return { spec, success: true, complexity };
   } catch (error) {
-    console.error("Planning error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error("[Orchestrator] Planning error:", errorMessage, error);
 
+    // Send detailed error to user
     onStream({
       phase: "error",
       message: "Planning failed",
       icon: "❌",
       progress: 0,
-      detail: error instanceof Error ? error.message : "Unknown error",
+      detail: errorMessage,
     });
 
     return { spec: null, success: false };
@@ -479,20 +584,42 @@ export async function orchestrateBuild(
   spec: AppSpec,
   context: GenerationContext,
   onStream: StreamCallback,
+  complexity?: TaskComplexity,
 ): Promise<{ files: Record<string, string>; success: boolean }> {
   try {
+    // Use provided complexity or re-analyze
+    const taskComplexity =
+      complexity ??
+      analyzeTaskComplexity(context.userPrompt, context.existingCode);
+
     // Generate code - AI should produce correct code from the start
-    let files = await generateCode(spec, context, onStream);
+    let files = await generateCode(spec, context, onStream, taskComplexity);
+
+    onStream({
+      phase: "building",
+      message: "Adding configuration files",
+      icon: "📦",
+      progress: 85,
+      detail: "Setting up package.json, tsconfig, etc...",
+    });
 
     // Ensure required config files exist
     files = ensureConfigFiles(files);
 
     onStream({
+      phase: "building",
+      message: "Final touches",
+      icon: "✨",
+      progress: 95,
+      detail: "Optimizing and organizing files...",
+    });
+
+    onStream({
       phase: "complete",
       message: "Your app is ready!",
-      icon: "✅",
+      icon: "🎉",
       progress: 100,
-      detail: `Generated ${Object.keys(files).length} files`,
+      detail: `Successfully generated ${Object.keys(files).length} files`,
     });
 
     return { files, success: true };

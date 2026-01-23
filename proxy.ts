@@ -34,18 +34,34 @@ function isApiRoute(pathname: string): boolean {
 }
 
 export async function proxy(req: NextRequest) {
-  // Handle CORS preflight requests in development
-  if (req.method === "OPTIONS" && process.env.NODE_ENV === "development") {
+  // Handle CORS preflight requests for ALL environments (needed for Expo Snack and generated apps)
+  if (req.method === "OPTIONS") {
     return new NextResponse(null, {
       status: 200,
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods":
           "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Allow-Headers":
+          "Content-Type, Authorization, X-RUX-API-Key, x-rux-api-key",
         "Access-Control-Max-Age": "86400",
       },
     });
+  }
+
+  // Add CORS headers to all API proxy responses
+  if (req.nextUrl.pathname.startsWith("/api/proxy/")) {
+    const response = NextResponse.next();
+    response.headers.set("Access-Control-Allow-Origin", "*");
+    response.headers.set(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+    );
+    response.headers.set(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-RUX-API-Key, x-rux-api-key",
+    );
+    return response;
   }
 
   // Handle subdomain routing for user projects (*.rux.sh)

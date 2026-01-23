@@ -40,6 +40,15 @@ export function useRealtimeProjects(userId: string | null) {
         },
         // On UPDATE
         (updatedProject) => {
+          const currentVersion = currentProject?.updatedAt;
+          const serverVersion = new Date(updatedProject.updated_at);
+
+          // Only apply if server version is newer
+          if (currentVersion && serverVersion <= currentVersion) {
+            console.log("[Realtime] Ignoring stale update from server");
+            return;
+          }
+
           const updates = {
             name: updatedProject.name,
             description: updatedProject.description,
@@ -51,8 +60,27 @@ export function useRealtimeProjects(userId: string | null) {
             subdomain: updatedProject.subdomain || null,
             customDomain: updatedProject.custom_domain || null,
             domainVerified: updatedProject.domain_verified || false,
-            updatedAt: new Date(updatedProject.updated_at),
+            updatedAt: serverVersion,
           };
+
+          // Check if this is the current project being actively edited
+          // Log warning if code structure changed (potential conflict)
+          if (currentProject?.id === updatedProject.id) {
+            const localCodeKeys = Object.keys(currentProject.codeFiles || {})
+              .sort()
+              .join(",");
+            const serverCodeKeys = Object.keys(updatedProject.code_files || {})
+              .sort()
+              .join(",");
+
+            if (localCodeKeys !== serverCodeKeys) {
+              console.warn(
+                "[Realtime] Code structure changed on server, potential conflict detected",
+              );
+              // Still apply update but user should be aware
+            }
+          }
+
           updateProject(updatedProject.id, updates);
 
           // If this is the current project, update it

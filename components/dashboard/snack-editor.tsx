@@ -863,8 +863,8 @@ export function SnackEditor({ className }: SnackEditorProps) {
                     src={webPreviewUrl}
                     className="w-full h-full border-0 bg-white"
                     title="Web Preview"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
-                    allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-presentation allow-storage-access-by-user-activation"
+                    allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; screen-wake-lock *"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-black/20">
@@ -920,8 +920,8 @@ export function SnackEditor({ className }: SnackEditorProps) {
                     src={webPreviewUrl}
                     className="w-full h-full border-0 bg-white"
                     title="Web Preview"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
-                    allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-presentation allow-storage-access-by-user-activation"
+                    allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; screen-wake-lock *"
                     onLoad={handleIframeLoad}
                   />
                 ) : (

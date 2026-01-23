@@ -9,6 +9,13 @@
 
 export type Platform = "IOS" | "ANDROID" | "WEB";
 
+export enum TaskComplexity {
+  SIMPLE = "simple", // Simple refinements, button additions, text changes
+  MODERATE = "moderate", // Single screen additions, styling updates
+  COMPLEX = "complex", // Multi-screen apps, complex state management
+  ADVANCED = "advanced", // Full apps with auth, payments, real-time features
+}
+
 export type AgentRole =
   | "orchestrator"
   | "frontend"
