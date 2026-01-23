@@ -249,7 +249,7 @@ function generatePreviewHtml(
   // URLSearchParams handles encoding automatically
   snackParams.set("code", appCode);
 
-  const snackUrl = `https://snack.expo.dev/embedded?${snackParams.toString()}`;
+  const snackUrl = `https://run.rux.sh?${snackParams.toString()}`;
 
   return `<!DOCTYPE html>
 <html lang="en">
