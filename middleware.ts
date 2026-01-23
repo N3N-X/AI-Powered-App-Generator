@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Admin emails that can bypass maintenance mode
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "nick@rux.sh")
-  .split(",")
-  .map((e) => e.trim().toLowerCase());
-
 // Define public routes that don't require authentication
 const publicRoutes = [
   "/",
@@ -18,6 +13,7 @@ const publicRoutes = [
   "/api/health",
   "/api/proxy",
   "/api/serve",
+  "/api/auth", // Auth endpoints are public
   "/docs",
   "/privacy",
   "/terms",
@@ -27,20 +23,8 @@ const publicRoutes = [
   "/maintenance",
 ];
 
-// Define protected routes that require specific plans
-const proRoutes = ["/api/github", "/api/build"];
-const eliteRoutes: string[] = [];
-
 function isPublicRoute(pathname: string): boolean {
   return publicRoutes.some((route) => pathname.startsWith(route));
-}
-
-function isProRoute(pathname: string): boolean {
-  return proRoutes.some((route) => pathname.startsWith(route));
-}
-
-function isEliteRoute(pathname: string): boolean {
-  return eliteRoutes.some((route) => pathname.startsWith(route));
 }
 
 function isApiRoute(pathname: string): boolean {
@@ -94,35 +78,22 @@ export async function middleware(req: NextRequest) {
     if (
       req.nextUrl.pathname.startsWith("/sign-in") ||
       req.nextUrl.pathname.startsWith("/sign-up") ||
-      req.nextUrl.pathname.startsWith("/api/webhooks")
+      req.nextUrl.pathname.startsWith("/api/webhooks") ||
+      req.nextUrl.pathname.startsWith("/api/auth")
     ) {
       return NextResponse.next();
     }
 
-    // Check if user is admin - for Firebase we'll check the session cookie
+    // In maintenance mode, check if user has session cookie
+    // Admin verification will be done in API routes using Firebase Admin SDK
     const sessionCookie = req.cookies.get("__session")?.value;
-    let isAdmin = false;
 
-    if (sessionCookie) {
-      try {
-        // We'll verify admin status in the API routes
-        // For now, just check if they have a session
-        // The API routes will handle the actual Firebase token verification
-        const { adminAuth } = await import("@/lib/firebase-admin");
-        const decodedToken = await adminAuth.verifySessionCookie(sessionCookie);
-
-        // Check if user email is in admin list
-        const userEmail = decodedToken.email?.toLowerCase() || "";
-        isAdmin = ADMIN_EMAILS.includes(userEmail);
-      } catch (error) {
-        console.error("[Maintenance] Error verifying session:", error);
-      }
-    }
-
-    // Redirect non-admin users to maintenance page
-    if (!isAdmin) {
+    if (!sessionCookie) {
       return NextResponse.redirect(new URL("/maintenance", req.url));
     }
+
+    // Let the request through - admin verification happens in API routes
+    // This avoids using Firebase Admin SDK in Edge Runtime
   }
 
   // Allow public routes
@@ -130,15 +101,19 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // For protected routes, check for session cookie
+  // For protected routes, check for authentication
   const sessionCookie = req.cookies.get("__session")?.value;
+  const authHeader = req.headers.get("Authorization");
 
-  // If no session cookie, handle unauthorized
-  if (!sessionCookie) {
+  // Check if user has either session cookie OR Authorization header
+  const hasAuth =
+    sessionCookie || (authHeader && authHeader.startsWith("Bearer "));
+
+  if (!hasAuth) {
     // For API routes, return 401
     if (isApiRoute(req.nextUrl.pathname)) {
       return NextResponse.json(
-        { error: "Unauthorized", code: "UNAUTHORIZED" },
+        { error: "Unauthorized", code: "NO_AUTH" },
         { status: 401 },
       );
     }
@@ -148,39 +123,9 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(signInUrl);
   }
 
-  // For API routes, verify the Firebase token and add user info to headers
-  if (isApiRoute(req.nextUrl.pathname)) {
-    try {
-      const { adminAuth } = await import("@/lib/firebase-admin");
-      const decodedToken = await adminAuth.verifySessionCookie(sessionCookie);
-      const userId = decodedToken.uid;
-
-      // Get user's plan from Firestore or database
-      // For now, we'll fetch from the database in the API route
-      // This middleware just passes the Firebase UID
-      const requestHeaders = new Headers(req.headers);
-      requestHeaders.set("x-user-id", userId);
-      requestHeaders.set("x-firebase-uid", userId);
-
-      // If we have the email, add it too
-      if (decodedToken.email) {
-        requestHeaders.set("x-user-email", decodedToken.email);
-      }
-
-      return NextResponse.next({
-        request: {
-          headers: requestHeaders,
-        },
-      });
-    } catch (error) {
-      console.error("[Middleware] Error verifying Firebase token:", error);
-      return NextResponse.json(
-        { error: "Invalid session", code: "INVALID_SESSION" },
-        { status: 401 },
-      );
-    }
-  }
-
+  // For API routes, just pass the request through
+  // The API routes will verify the session cookie or Bearer token using Firebase Admin SDK
+  // We don't verify here to avoid Edge Runtime issues
   return NextResponse.next();
 }
 

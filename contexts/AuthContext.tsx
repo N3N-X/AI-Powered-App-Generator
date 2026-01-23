@@ -50,13 +50,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (user) {
         try {
           const idToken = await user.getIdToken();
-          await fetch("/api/auth/session", {
+          const response = await fetch("/api/auth/session", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ idToken }),
           });
+
+          if (!response.ok) {
+            const error = await response.json();
+            console.error("Failed to create session cookie:", error);
+            // Session cookie creation failed, but user can still use Bearer token
+            console.warn("Falling back to Authorization header for API calls");
+          } else {
+            console.log("Session cookie created successfully");
+          }
         } catch (error) {
           console.error("Error creating session:", error);
+          // Silently fail - API calls will use Authorization header as fallback
         }
       }
 

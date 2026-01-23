@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api-client";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,7 +34,7 @@ export default function DashboardOverview() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const userResponse = await fetch("/api/user");
+        const userResponse = await api.get("/api/user");
         if (userResponse.ok) {
           const userData = await userResponse.json();
           setUser(userData.user);
@@ -43,7 +44,7 @@ export default function DashboardOverview() {
           });
         }
 
-        const projectsResponse = await fetch("/api/projects");
+        const projectsResponse = await api.get("/api/projects");
         if (projectsResponse.ok) {
           const data = await projectsResponse.json();
           setProjects(data.projects || []);
@@ -260,7 +261,7 @@ export default function DashboardOverview() {
                   className="bg-white/60 dark:bg-white/5 backdrop-blur-xl border border-gray-200/50 dark:border-white/10 hover:bg-white/70 dark:hover:bg-white/[0.06] transition-all duration-200 cursor-pointer"
                   onClick={async () => {
                     try {
-                      const response = await fetch(
+                      const response = await api.get(
                         `/api/projects/${project.id}`,
                       );
                       if (response.ok) {

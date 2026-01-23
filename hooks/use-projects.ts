@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { useProjectStore } from "@/stores/project-store";
 import { toast } from "@/hooks/use-toast";
+import { api } from "@/lib/api-client";
 
 export function useProjects() {
   const {
@@ -18,7 +19,7 @@ export function useProjects() {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const response = await fetch("/api/projects");
+      const response = await api.get("/api/projects");
       if (!response.ok) throw new Error("Failed to fetch projects");
 
       const data = await response.json();
@@ -36,11 +37,7 @@ export function useProjects() {
   const createProject = useCallback(
     async (name: string, template?: string) => {
       try {
-        const response = await fetch("/api/projects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, template }),
-        });
+        const response = await api.post("/api/projects", { name, template });
 
         if (!response.ok) throw new Error("Failed to create project");
 
@@ -64,7 +61,7 @@ export function useProjects() {
         return null;
       }
     },
-    [addProject, setCurrentProject]
+    [addProject, setCurrentProject],
   );
 
   const saveProject = useCallback(async () => {
@@ -72,13 +69,9 @@ export function useProjects() {
 
     setIsSaving(true);
     try {
-      const response = await fetch(`/api/projects/${currentProject.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          codeFiles: currentProject.codeFiles,
-          appConfig: currentProject.appConfig,
-        }),
+      const response = await api.patch(`/api/projects/${currentProject.id}`, {
+        codeFiles: currentProject.codeFiles,
+        appConfig: currentProject.appConfig,
       });
 
       if (!response.ok) throw new Error("Failed to save project");
@@ -102,9 +95,7 @@ export function useProjects() {
   const removeProject = useCallback(
     async (projectId: string) => {
       try {
-        const response = await fetch(`/api/projects/${projectId}`, {
-          method: "DELETE",
-        });
+        const response = await api.delete(`/api/projects/${projectId}`);
 
         if (!response.ok) throw new Error("Failed to delete project");
 
@@ -126,15 +117,15 @@ export function useProjects() {
         });
       }
     },
-    [currentProject, deleteProject, setCurrentProject]
+    [currentProject, deleteProject, setCurrentProject],
   );
 
   const exportProject = useCallback(async () => {
     if (!currentProject) return;
 
     try {
-      const response = await fetch(
-        `/api/export?projectId=${currentProject.id}`
+      const response = await api.get(
+        `/api/export?projectId=${currentProject.id}`,
       );
 
       if (!response.ok) throw new Error("Failed to export project");
