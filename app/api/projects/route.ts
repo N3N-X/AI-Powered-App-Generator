@@ -17,6 +17,23 @@ import type { ProxyService } from "@/types/proxy";
 import { corsHeaders, handleCorsOptions, withCors } from "@/lib/cors";
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
 
+// Transform database snake_case to frontend camelCase
+function transformProject(project: any) {
+  return {
+    ...project,
+    codeFiles: project.code_files,
+    appConfig: project.app_config,
+    chatHistory: project.chat_history,
+    githubRepo: project.github_repo,
+    githubUrl: project.github_url,
+    customDomain: project.custom_domain,
+    domainVerified: project.domain_verified,
+    createdAt: project.created_at,
+    updatedAt: project.updated_at,
+    userId: project.user_id,
+  };
+}
+
 // Default services for auto-generated API keys
 const DEFAULT_PROJECT_SERVICES: ProxyService[] = [
   "database",
@@ -54,7 +71,10 @@ export async function GET(request: NextRequest) {
     // Get user's projects
     const projects = await getUserProjects(uid);
 
-    return withCors(NextResponse.json({ projects }));
+    // Transform all projects to camelCase
+    const transformedProjects = projects.map(transformProject);
+
+    return withCors(NextResponse.json({ projects: transformedProjects }));
   } catch (error) {
     console.error("Failed to fetch projects:", error);
     return withCors(
@@ -131,10 +151,13 @@ export async function POST(request: NextRequest) {
       DEFAULT_PROJECT_SERVICES,
     );
 
+    // Transform snake_case to camelCase for frontend
+    const transformedProject = transformProject(project);
+
     return withCors(
       NextResponse.json(
         {
-          project,
+          project: transformedProject,
           apiKey: {
             key: rawKey,
             keyPrefix,

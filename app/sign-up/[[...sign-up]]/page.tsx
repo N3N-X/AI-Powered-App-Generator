@@ -162,11 +162,27 @@ export default function SignUpPage() {
     try {
       await signUp(email, password, name);
 
-      toast({
-        title: "Account created!",
-        description: "Welcome to RUX. Check your email to verify your account.",
-      });
-      router.push("/dashboard");
+      // Check if email confirmation is required
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session) {
+        // Email confirmation disabled - user is logged in immediately
+        toast({
+          title: "Account created!",
+          description: "Welcome to RUX!",
+        });
+        router.push("/dashboard");
+      } else {
+        // Email confirmation required
+        toast({
+          title: "Account created!",
+          description:
+            "Please check your email to verify your account before logging in.",
+        });
+        router.push("/sign-in");
+      }
     } catch (error: any) {
       toast({
         title: "Sign up failed",
