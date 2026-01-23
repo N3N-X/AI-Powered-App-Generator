@@ -45,12 +45,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user is admin
-    const adminUser = await prisma.user.findUnique({
-      where: { id: uid },
-      select: { role: true },
-    });
+    const supabase = await createClient();
+    const { data: adminUser, error: adminError } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", uid)
+      .single();
 
-    if (!adminUser || adminUser.role !== "ADMIN") {
+    if (adminError || !adminUser || adminUser.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Admin access required" },
         { status: 403 },
@@ -63,50 +65,62 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const plan = searchParams.get("plan") as "FREE" | "PRO" | "ELITE" | null;
 
-    const where = {
-      ...(search && {
-        OR: [
-          { email: { contains: search, mode: "insensitive" as const } },
-          { name: { contains: search, mode: "insensitive" as const } },
-        ],
-      }),
-      ...(plan && { plan }),
-    };
+    // Build query
+    let query = supabase
+      .from("users")
+      .select(
+        "id, email, name, plan, role, credits, total_credits_used, created_at, updated_at",
+        { count: "exact" },
+      )
+      .order("created_at", { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
 
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          plan: true,
-          role: true,
-          credits: true,
-          totalCreditsUsed: true,
-          createdAt: true,
-          updatedAt: true,
+    if (search) {
+      query = query.or(`email.ilike.%${search}%,name.ilike.%${search}%`);
+    }
+    if (plan) {
+      query = query.eq("plan", plan);
+    }
+
+    const { data: users, count: total, error: usersError } = await query;
+
+    if (usersError) {
+      throw usersError;
+    }
+
+    // Get counts for projects and builds per user
+    const usersWithCounts = await Promise.all(
+      (users || []).map(async (user) => {
+        const { count: projectCount } = await supabase
+          .from("projects")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id);
+
+        const { count: buildCount } = await supabase
+          .from("builds")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id);
+
+        return {
+          ...user,
+          totalCreditsUsed: user.total_credits_used,
+          createdAt: user.created_at,
+          updatedAt: user.updated_at,
           _count: {
-            select: {
-              projects: true,
-              builds: true,
-            },
+            projects: projectCount || 0,
+            builds: buildCount || 0,
           },
-        },
+        };
       }),
-      prisma.user.count({ where }),
-    ]);
+    );
 
     return NextResponse.json({
-      users,
+      users: usersWithCounts,
       pagination: {
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+        total: total || 0,
+        totalPages: Math.ceil((total || 0) / limit),
       },
     });
   } catch (error) {
@@ -166,12 +180,14 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Check if user is admin
-    const adminUser = await prisma.user.findUnique({
-      where: { id: uid },
-      select: { role: true },
-    });
+    const supabase = await createClient();
+    const { data: adminUser, error: adminError } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", uid)
+      .single();
 
-    if (!adminUser || adminUser.role !== "ADMIN") {
+    if (adminError || !adminUser || adminUser.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Admin access required" },
         { status: 403 },
@@ -186,18 +202,16 @@ export async function PATCH(request: NextRequest) {
     if (data.role !== undefined) updateData.role = data.role;
     if (data.credits !== undefined) updateData.credits = data.credits;
 
-    const updatedUser = await prisma.user.update({
-      where: { id: data.userId },
-      data: updateData,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        plan: true,
-        role: true,
-        credits: true,
-      },
-    });
+    const { data: updatedUser, error: updateError } = await supabase
+      .from("users")
+      .update(updateData)
+      .eq("id", data.userId)
+      .select("id, email, name, plan, role, credits")
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     return NextResponse.json({ user: updatedUser });
   } catch (error) {

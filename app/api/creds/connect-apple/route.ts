@@ -72,11 +72,14 @@ export async function POST(request: NextRequest) {
     const data = AppleCredentialSchema.parse(body);
 
     // Get user
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -97,35 +100,42 @@ export async function POST(request: NextRequest) {
     };
     const encryptedData = await encryptJson(sensitiveData);
 
-    // Upsert credential
-    await prisma.developerCredential.upsert({
-      where: {
-        userId_platform_name: {
-          userId: user.id,
-          platform: "apple",
-          name: data.name,
-        },
-      },
-      create: {
+    // Check if credential exists
+    const { data: existingCred } = await supabase
+      .from("developer_credentials")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("platform", "apple")
+      .eq("name", data.name)
+      .single();
+
+    if (existingCred) {
+      // Update existing credential
+      await supabase
+        .from("developer_credentials")
+        .update({
+          encrypted_data: encryptedData,
+          metadata: {
+            teamId: data.teamId,
+            bundleId: data.bundleId,
+          },
+          verified: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingCred.id);
+    } else {
+      // Create new credential
+      await supabase.from("developer_credentials").insert({
         platform: "apple",
         name: data.name,
-        encryptedData,
+        encrypted_data: encryptedData,
         metadata: {
           teamId: data.teamId,
           bundleId: data.bundleId,
         },
-        userId: user.id,
-      },
-      update: {
-        encryptedData,
-        metadata: {
-          teamId: data.teamId,
-          bundleId: data.bundleId,
-        },
-        verified: false,
-        updatedAt: new Date(),
-      },
-    });
+        user_id: user.id,
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -192,34 +202,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      include: {
-        credentials: {
-          where: { platform: "apple" },
-          select: {
-            id: true,
-            name: true,
-            verified: true,
-            metadata: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    const { data: credentials } = await supabase
+      .from("developer_credentials")
+      .select("id, name, verified, metadata, created_at")
+      .eq("user_id", uid)
+      .eq("platform", "apple");
+
     return NextResponse.json({
-      connected: user.credentials.length > 0,
-      credentials: user.credentials.map((c) => ({
+      connected: (credentials?.length || 0) > 0,
+      credentials: (credentials || []).map((c) => ({
         id: c.id,
         name: c.name,
         verified: c.verified,
         teamId: (c.metadata as Record<string, unknown>)?.teamId,
-        createdAt: c.createdAt,
+        createdAt: c.created_at,
       })),
     });
   } catch (error) {
@@ -280,22 +287,24 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Delete credential (only if belongs to user)
-    await prisma.developerCredential.deleteMany({
-      where: {
-        id: credentialId,
-        userId: user.id,
-        platform: "apple",
-      },
-    });
+    await supabase
+      .from("developer_credentials")
+      .delete()
+      .eq("id", credentialId)
+      .eq("user_id", user.id)
+      .eq("platform", "apple");
 
     return NextResponse.json({ success: true });
   } catch (error) {

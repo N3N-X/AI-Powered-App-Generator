@@ -90,6 +90,8 @@ const nextConfig: NextConfig = {
 
     return config;
   },
+  // Next.js 16: Enable React Compiler for automatic memoization
+  reactCompiler: true,
   experimental: {
     serverActions: {
       bodySizeLimit: "10mb",

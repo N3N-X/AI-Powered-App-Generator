@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, "EMAIL)) {
+  if (!hasServiceAccess(services, "email")) {
     return proxyError(
       "This API key does not have access to the Email service",
       "FORBIDDEN",
@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
         apiKeyId,
         projectId,
         userId,
-        service: "EMAIL,
+        service: "email",
         operation: "send",
         creditsUsed: 0,
         success: false,
@@ -327,7 +327,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: "EMAIL,
+      service: "email",
       operation: "send",
       creditsUsed: creditsRequired,
       success: true,
@@ -351,7 +351,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: "EMAIL,
+      service: "email",
       operation: "send",
       creditsUsed: 0,
       success: false,

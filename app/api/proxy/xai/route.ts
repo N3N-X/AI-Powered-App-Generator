@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
 
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
-  if (!hasServiceAccess(services, "XAI)) {
+  if (!hasServiceAccess(services, "xai")) {
     return proxyError(
       "This API key does not have access to the xAI service",
       "FORBIDDEN",
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
         apiKeyId,
         projectId,
         userId,
-        service: "XAI,
+        service: "xai",
         operation: "chat.completions",
         creditsUsed: 0,
         success: false,
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: "XAI,
+      service: "xai",
       operation: "chat.completions",
       creditsUsed,
       success: true,
@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: "XAI,
+      service: "xai",
       operation: "chat.completions",
       creditsUsed: 0,
       success: false,

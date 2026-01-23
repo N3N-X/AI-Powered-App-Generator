@@ -62,27 +62,31 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user and project
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      include: {
-        projects: {
-          where: { id: projectId },
-        },
-      },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const project = user.projects[0];
-    if (!project) {
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("user_id", uid)
+      .single();
+
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     // Get code files and prepare for export
-    const codeFiles = project.codeFiles as CodeFiles;
-    const appConfig = (project.appConfig as AppConfig) || {
+    const codeFiles = project.code_files as CodeFiles;
+    const appConfig = (project.app_config as AppConfig) || {
       name: project.name,
       slug: project.slug,
       version: "1.0.0",

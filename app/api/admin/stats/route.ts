@@ -26,12 +26,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user is admin
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      select: { role: true },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", uid)
+      .single();
 
-    if (!user || user.role !== "ADMIN") {
+    if (userError || !user || user.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Admin access required" },
         { status: 403 },
@@ -39,86 +41,97 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user statistics
-    const [
-      totalUsers,
-      freeUsers,
-      proUsers,
-      eliteUsers,
-      totalProjects,
-      totalBuilds,
-      recentSignups,
-    ] = await Promise.all([
-      prisma.user.count(),
-      prisma.user.count({ where: { plan: "FREE" } }),
-      prisma.user.count({ where: { plan: "PRO" } }),
-      prisma.user.count({ where: { plan: "ELITE" } }),
-      prisma.project.count(),
-      prisma.build.count(),
-      prisma.user.findMany({
-        take: 10,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          plan: true,
-          createdAt: true,
-        },
+    const { count: totalUsers } = await supabase
+      .from("users")
+      .select("*", { count: "exact", head: true });
+
+    const { count: freeUsers } = await supabase
+      .from("users")
+      .select("*", { count: "exact", head: true })
+      .eq("plan", "FREE");
+
+    const { count: proUsers } = await supabase
+      .from("users")
+      .select("*", { count: "exact", head: true })
+      .eq("plan", "PRO");
+
+    const { count: eliteUsers } = await supabase
+      .from("users")
+      .select("*", { count: "exact", head: true })
+      .eq("plan", "ELITE");
+
+    const { count: totalProjects } = await supabase
+      .from("projects")
+      .select("*", { count: "exact", head: true });
+
+    const { count: totalBuilds } = await supabase
+      .from("builds")
+      .select("*", { count: "exact", head: true });
+
+    const { data: recentSignups } = await supabase
+      .from("users")
+      .select("id, email, name, plan, created_at")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    // Get credit usage stats - manually aggregate
+    const { data: allUsers } = await supabase
+      .from("users")
+      .select("credits, total_credits_used");
+
+    const creditStats = (allUsers || []).reduce(
+      (acc, u) => ({
+        totalUsed: acc.totalUsed + (u.total_credits_used || 0),
+        totalRemaining: acc.totalRemaining + (u.credits || 0),
+        count: acc.count + 1,
       }),
-    ]);
+      { totalUsed: 0, totalRemaining: 0, count: 0 },
+    );
 
-    // Get credit usage stats
-    const creditStats = await prisma.user.aggregate({
-      _sum: {
-        totalCreditsUsed: true,
-        credits: true,
-      },
-      _avg: {
-        credits: true,
-        totalCreditsUsed: true,
-      },
-    });
+    // Get build statistics - manually group
+    const { data: allBuilds } = await supabase.from("builds").select("status");
 
-    // Get build statistics
-    const buildStats = await prisma.build.groupBy({
-      by: ["status"],
-      _count: true,
-    });
+    const buildStats = (allBuilds || []).reduce(
+      (acc, b) => {
+        acc[b.status.toLowerCase()] = (acc[b.status.toLowerCase()] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     // Calculate revenue estimate (rough)
-    const monthlyRevenue = proUsers * 19 + eliteUsers * 49;
+    const monthlyRevenue = (proUsers || 0) * 19 + (eliteUsers || 0) * 49;
 
     return NextResponse.json({
       users: {
-        total: totalUsers,
+        total: totalUsers || 0,
         byPlan: {
-          free: freeUsers,
-          pro: proUsers,
-          elite: eliteUsers,
+          free: freeUsers || 0,
+          pro: proUsers || 0,
+          elite: eliteUsers || 0,
         },
       },
       projects: {
-        total: totalProjects,
+        total: totalProjects || 0,
       },
       builds: {
-        total: totalBuilds,
-        byStatus: buildStats.reduce(
-          (acc, stat) => ({
-            ...acc,
-            [stat.status.toLowerCase()]: stat._count,
-          }),
-          {},
-        ),
+        total: totalBuilds || 0,
+        byStatus: buildStats,
       },
       credits: {
-        totalUsed: creditStats._sum.totalCreditsUsed || 0,
-        totalRemaining: creditStats._sum.credits || 0,
-        avgPerUser: Math.round(creditStats._avg.totalCreditsUsed || 0),
+        totalUsed: creditStats.totalUsed,
+        totalRemaining: creditStats.totalRemaining,
+        avgPerUser: Math.round(
+          creditStats.count > 0 ? creditStats.totalUsed / creditStats.count : 0,
+        ),
       },
       revenue: {
         monthlyEstimate: monthlyRevenue,
       },
-      recentSignups,
+      recentSignups: (recentSignups || []).map((u) => ({
+        ...u,
+        createdAt: u.created_at,
+      })),
       maintenanceMode: process.env.MAINTENANCE_MODE === "true",
     });
   } catch (error) {

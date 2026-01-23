@@ -13,18 +13,18 @@ import {
   RESERVED_SUBDOMAINS,
 } from "@/lib/subdomain";
 import { generateApiKey } from "@/lib/proxy";
-import type { ProxyService } from "@/lib/supabase/types";
+import type { ProxyService } from "@/types/proxy";
 import { corsHeaders, handleCorsOptions, withCors } from "@/lib/cors";
 import { getAuthenticatedUser } from "@/lib/auth-helpers";
 
 // Default services for auto-generated API keys
 const DEFAULT_PROJECT_SERVICES: ProxyService[] = [
-  "DATABASE",
-  "EMAIL",
-  "SMS",
-  "MAPS",
-  "STORAGE",
-  "OPENAI",
+  "database",
+  "email",
+  "sms",
+  "maps",
+  "storage",
+  "openai",
 ];
 
 const createProjectSchema = z.object({

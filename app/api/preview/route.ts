@@ -22,27 +22,31 @@ export async function GET(request: NextRequest) {
       return new NextResponse("Invalid project ID format", { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      include: {
-        projects: {
-          where: { id: projectId },
-        },
-      },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return new NextResponse("User not found", { status: 404 });
     }
 
-    const project = user.projects[0];
-    if (!project) {
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("user_id", uid)
+      .single();
+
+    if (projectError || !project) {
       return new NextResponse("Project not found", { status: 404 });
     }
 
     let codeFiles: CodeFiles = {};
     try {
-      codeFiles = (project.codeFiles as CodeFiles) || {};
+      codeFiles = (project.code_files as CodeFiles) || {};
     } catch {
       codeFiles = {};
     }

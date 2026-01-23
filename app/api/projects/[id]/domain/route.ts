@@ -64,30 +64,25 @@ export async function GET(
 
     const { id } = await params;
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const project = await prisma.project.findFirst({
-      where: {
-        id,
-        userId: user.id,
-      },
-      select: {
-        id: true,
-        platform: true,
-        subdomain: true,
-        customDomain: true,
-        domainVerified: true,
-        slug: true,
-      },
-    });
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id, platform, subdomain, custom_domain, domain_verified, slug")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!project) {
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
@@ -100,14 +95,14 @@ export async function GET(
 
     return NextResponse.json({
       subdomain: project.subdomain,
-      customDomain: project.customDomain,
-      domainVerified: project.domainVerified,
+      customDomain: project.custom_domain,
+      domainVerified: project.domain_verified,
       // Helper URLs
       subdomainUrl: project.subdomain
         ? `https://${project.subdomain}.rux.sh`
         : null,
-      customDomainUrl: project.customDomain
-        ? `https://${project.customDomain}`
+      customDomainUrl: project.custom_domain
+        ? `https://${project.custom_domain}`
         : null,
     });
   } catch (error) {
@@ -140,22 +135,25 @@ export async function PATCH(
     const body = await request.json();
     const data = updateDomainSchema.parse(body);
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const project = await prisma.project.findFirst({
-      where: {
-        id,
-        userId: user.id,
-      },
-    });
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!project) {
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
@@ -179,12 +177,12 @@ export async function PATCH(
       }
 
       // Check if already taken by another project
-      const existing = await prisma.project.findFirst({
-        where: {
-          subdomain: lowerSubdomain,
-          id: { not: id },
-        },
-      });
+      const { data: existing } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("subdomain", lowerSubdomain)
+        .neq("id", id)
+        .single();
 
       if (existing) {
         return NextResponse.json(
@@ -201,12 +199,12 @@ export async function PATCH(
       const lowerDomain = data.customDomain.toLowerCase();
 
       // Check if already taken by another project
-      const existing = await prisma.project.findFirst({
-        where: {
-          customDomain: lowerDomain,
-          id: { not: id },
-        },
-      });
+      const { data: existing } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("custom_domain", lowerDomain)
+        .neq("id", id)
+        .single();
 
       if (existing) {
         return NextResponse.json(
@@ -219,45 +217,51 @@ export async function PATCH(
     }
 
     // Update project
-    const updatedProject = await prisma.project.update({
-      where: { id },
-      data: {
-        subdomain: data.subdomain,
-        customDomain: data.customDomain,
-        // Reset verification if custom domain changed
-        ...(data.customDomain !== project.customDomain && {
-          domainVerified: false,
-        }),
-        updatedAt: new Date(),
-      },
-      select: {
-        subdomain: true,
-        customDomain: true,
-        domainVerified: true,
-      },
-    });
+    const updateData: Record<string, unknown> = {
+      subdomain: data.subdomain,
+      custom_domain: data.customDomain,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Reset verification if custom domain changed
+    if (data.customDomain !== project.custom_domain) {
+      updateData.domain_verified = false;
+    }
+
+    const { data: updatedProject, error: updateError } = await supabase
+      .from("projects")
+      .update(updateData)
+      .eq("id", id)
+      .select("subdomain, custom_domain, domain_verified")
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     return NextResponse.json({
       ...updatedProject,
+      customDomain: updatedProject.custom_domain,
+      domainVerified: updatedProject.domain_verified,
       subdomainUrl: updatedProject.subdomain
         ? `https://${updatedProject.subdomain}.rux.sh`
         : null,
-      customDomainUrl: updatedProject.customDomain
-        ? `https://${updatedProject.customDomain}`
+      customDomainUrl: updatedProject.custom_domain
+        ? `https://${updatedProject.custom_domain}`
         : null,
       // DNS records needed for custom domain verification
-      ...(updatedProject.customDomain &&
-        !updatedProject.domainVerified && {
+      ...(updatedProject.custom_domain &&
+        !updatedProject.domain_verified && {
           dnsRecords: [
             {
               type: "CNAME",
-              name: updatedProject.customDomain,
+              name: updatedProject.custom_domain,
               value: "cname.rux.sh",
               ttl: 300,
             },
             {
               type: "TXT",
-              name: `_rux.${updatedProject.customDomain}`,
+              name: `_rux.${updatedProject.custom_domain}`,
               value: `rux-verify=${id}`,
               ttl: 300,
             },
@@ -301,37 +305,36 @@ export async function DELETE(
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type"); // "subdomain" | "customDomain" | "all"
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const project = await prisma.project.findFirst({
-      where: {
-        id,
-        userId: user.id,
-      },
-    });
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!project) {
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const updateData: {
-      subdomain?: null;
-      customDomain?: null;
-      domainVerified?: boolean;
-    } = {};
+    const updateData: Record<string, unknown> = {};
 
     if (type === "subdomain" || type === "all") {
       updateData.subdomain = null;
     }
     if (type === "customDomain" || type === "all") {
-      updateData.customDomain = null;
-      updateData.domainVerified = false;
+      updateData.custom_domain = null;
+      updateData.domain_verified = false;
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -341,10 +344,7 @@ export async function DELETE(
       );
     }
 
-    await prisma.project.update({
-      where: { id },
-      data: updateData,
-    });
+    await supabase.from("projects").update(updateData).eq("id", id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

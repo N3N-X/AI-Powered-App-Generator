@@ -91,26 +91,30 @@ export async function POST(request: NextRequest) {
 
           const creditsToAdd = parseInt(credits);
 
+          const supabase = await createClient();
+
           // Add credits to user account
-          await prisma.user.update({
-            where: { id: userId },
-            data: {
-              credits: {
-                increment: creditsToAdd,
-              },
-            },
-          });
+          const { data: currentUser } = await supabase
+            .from("users")
+            .select("credits")
+            .eq("id", userId)
+            .single();
+
+          if (currentUser) {
+            await supabase
+              .from("users")
+              .update({ credits: currentUser.credits + creditsToAdd })
+              .eq("id", userId);
+          }
 
           // Record the purchase
-          await prisma.tokenPurchase.create({
-            data: {
-              userId: userId,
-              credits: creditsToAdd,
-              amountPaid: session.amount_total || 0,
-              currency: session.currency || "usd",
-              stripePaymentIntentId: session.payment_intent as string,
-              status: "completed",
-            },
+          await supabase.from("token_purchases").insert({
+            user_id: userId,
+            credits: creditsToAdd,
+            amount_paid: session.amount_total || 0,
+            currency: session.currency || "usd",
+            stripe_payment_intent_id: session.payment_intent as string,
+            status: "completed",
           });
 
           console.log(
@@ -124,30 +128,40 @@ export async function POST(request: NextRequest) {
         const charge = event.data.object as Stripe.Charge;
         const paymentIntentId = charge.payment_intent as string;
 
+        const supabase = await createClient();
+
         // Check if this was a token purchase
-        const purchase = await prisma.tokenPurchase.findUnique({
-          where: { stripePaymentIntentId: paymentIntentId },
-        });
+        const { data: purchase } = await supabase
+          .from("token_purchases")
+          .select("*")
+          .eq("stripe_payment_intent_id", paymentIntentId)
+          .single();
 
         if (purchase && purchase.status !== "refunded") {
           // Deduct the credits from user
-          await prisma.user.update({
-            where: { id: purchase.userId },
-            data: {
-              credits: {
-                decrement: purchase.credits,
-              },
-            },
-          });
+          const { data: currentUser } = await supabase
+            .from("users")
+            .select("credits")
+            .eq("id", purchase.user_id)
+            .single();
+
+          if (currentUser) {
+            await supabase
+              .from("users")
+              .update({
+                credits: Math.max(0, currentUser.credits - purchase.credits),
+              })
+              .eq("id", purchase.user_id);
+          }
 
           // Mark purchase as refunded
-          await prisma.tokenPurchase.update({
-            where: { id: purchase.id },
-            data: {
+          await supabase
+            .from("token_purchases")
+            .update({
               status: "refunded",
-              refundedAt: new Date(),
-            },
-          });
+              refunded_at: new Date().toISOString(),
+            })
+            .eq("id", purchase.id);
 
           console.log(
             `[Token Purchase Webhook] Refunded: ${purchase.credits} credits deducted`,

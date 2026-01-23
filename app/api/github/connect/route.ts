@@ -69,21 +69,24 @@ export async function POST(request: NextRequest) {
     const githubUser = await verifyGitHubToken(data.accessToken);
 
     // Find user
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Encrypt and store the token
     const encryptedToken = await encrypt(data.accessToken);
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { githubTokenEncrypted: encryptedToken },
-    });
+    await supabase
+      .from("users")
+      .update({ github_token_encrypted: encryptedToken })
+      .eq("id", user.id);
 
     return NextResponse.json({
       success: true,
@@ -139,18 +142,21 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { githubTokenEncrypted: null },
-    });
+    await supabase
+      .from("users")
+      .update({ github_token_encrypted: null })
+      .eq("id", user.id);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -192,17 +198,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      select: { githubTokenEncrypted: true },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("github_token_encrypted")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     return NextResponse.json({
-      connected: !!user.githubTokenEncrypted,
+      connected: !!user.github_token_encrypted,
     });
   } catch (error) {
     console.error("GitHub status error:", error);

@@ -16,7 +16,6 @@ export async function OPTIONS() {
   return proxyCorsOptions();
 }
 import { DatabaseProxyRequestSchema } from "@/types/proxy";
-import { ProxyService, Prisma } from "@prisma/client";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -53,7 +52,7 @@ export async function POST(request: NextRequest) {
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, "DATABASE)) {
+  if (!hasServiceAccess(services, "database")) {
     return proxyError(
       "This API key does not have access to the Database service",
       "FORBIDDEN",
@@ -100,24 +99,36 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const supabase = await createClient();
+
   try {
     let result: unknown;
     let count: number | undefined;
 
     // Get or create collection for this project
-    const collectionRecord = await prisma.appCollection.upsert({
-      where: {
-        projectId_name: {
-          projectId,
+    let { data: collectionRecord, error: collectionError } = await supabase
+      .from("app_collections")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("name", collection)
+      .single();
+
+    if (collectionError || !collectionRecord) {
+      // Create new collection
+      const { data: newCollection, error: createError } = await supabase
+        .from("app_collections")
+        .insert({
+          project_id: projectId,
           name: collection,
-        },
-      },
-      create: {
-        projectId,
-        name: collection,
-      },
-      update: {},
-    });
+        })
+        .select()
+        .single();
+
+      if (createError || !newCollection) {
+        throw new Error("Failed to create collection");
+      }
+      collectionRecord = newCollection;
+    }
 
     switch (operation) {
       case "create": {
@@ -128,39 +139,45 @@ export async function POST(request: NextRequest) {
             400,
           );
         }
-        const doc = await prisma.appDocument.create({
-          data: {
-            collectionId: collectionRecord.id,
-            data: data as Prisma.InputJsonValue,
-          },
-        });
+        const { data: doc, error: docError } = await supabase
+          .from("app_documents")
+          .insert({
+            collection_id: collectionRecord.id,
+            data: data,
+          })
+          .select()
+          .single();
+
+        if (docError || !doc) {
+          throw new Error("Failed to create document");
+        }
+
         result = {
           id: doc.id,
           ...data,
-          createdAt: doc.createdAt,
-          updatedAt: doc.updatedAt,
+          createdAt: doc.created_at,
+          updatedAt: doc.updated_at,
         };
         break;
       }
 
       case "findOne": {
-        const docs = await prisma.appDocument.findMany({
-          where: {
-            collectionId: collectionRecord.id,
-          },
-          take: 100, // Fetch batch to filter in memory
-        });
+        const { data: docs, error: docsError } = await supabase
+          .from("app_documents")
+          .select("*")
+          .eq("collection_id", collectionRecord.id)
+          .limit(100);
 
         // Filter documents by matching the filter against data JSON
-        const found = docs.find((doc) =>
+        const found = docs?.find((doc) =>
           matchesFilter(doc.data as Record<string, unknown>, filter),
         );
         result = found
           ? {
               id: found.id,
               ...(found.data as object),
-              createdAt: found.createdAt,
-              updatedAt: found.updatedAt,
+              createdAt: found.created_at,
+              updatedAt: found.updated_at,
             }
           : null;
         break;
@@ -170,16 +187,15 @@ export async function POST(request: NextRequest) {
         const limit = options?.limit ?? 20;
         const skip = options?.skip ?? 0;
 
-        const docs = await prisma.appDocument.findMany({
-          where: {
-            collectionId: collectionRecord.id,
-          },
-          orderBy: { createdAt: "desc" },
-          take: 500, // Max fetch for filtering
-        });
+        const { data: docs, error: docsError } = await supabase
+          .from("app_documents")
+          .select("*")
+          .eq("collection_id", collectionRecord.id)
+          .order("created_at", { ascending: false })
+          .limit(500);
 
         // Filter documents in memory
-        const filtered = docs.filter((doc) =>
+        const filtered = (docs || []).filter((doc) =>
           matchesFilter(doc.data as Record<string, unknown>, filter),
         );
 
@@ -205,8 +221,8 @@ export async function POST(request: NextRequest) {
         result = paginated.map((doc) => ({
           id: doc.id,
           ...(doc.data as object),
-          createdAt: doc.createdAt,
-          updatedAt: doc.updatedAt,
+          createdAt: doc.created_at,
+          updatedAt: doc.updated_at,
         }));
         break;
       }
@@ -220,29 +236,37 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const docs = await prisma.appDocument.findMany({
-          where: { collectionId: collectionRecord.id },
-          take: 100,
-        });
+        const { data: docs, error: docsError } = await supabase
+          .from("app_documents")
+          .select("*")
+          .eq("collection_id", collectionRecord.id)
+          .limit(100);
 
-        const toUpdate = docs.find((doc) =>
+        const toUpdate = docs?.find((doc) =>
           matchesFilter(doc.data as Record<string, unknown>, filter),
         );
         if (!toUpdate) {
           result = null;
         } else {
           const mergedData = { ...(toUpdate.data as object), ...data };
-          const updatedDoc = await prisma.appDocument.update({
-            where: { id: toUpdate.id },
-            data: {
-              data: mergedData as Prisma.InputJsonValue,
-            },
-          });
+          const { data: updatedDoc, error: updateError } = await supabase
+            .from("app_documents")
+            .update({
+              data: mergedData,
+            })
+            .eq("id", toUpdate.id)
+            .select()
+            .single();
+
+          if (updateError || !updatedDoc) {
+            throw new Error("Failed to update document");
+          }
+
           result = {
             id: updatedDoc.id,
             ...(updatedDoc.data as object),
-            createdAt: updatedDoc.createdAt,
-            updatedAt: updatedDoc.updatedAt,
+            createdAt: updatedDoc.created_at,
+            updatedAt: updatedDoc.updated_at,
           };
         }
         break;
@@ -257,23 +281,24 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const docs = await prisma.appDocument.findMany({
-          where: { collectionId: collectionRecord.id },
-        });
+        const { data: docs, error: docsError } = await supabase
+          .from("app_documents")
+          .select("*")
+          .eq("collection_id", collectionRecord.id);
 
-        const toUpdate = docs.filter((doc) =>
+        const toUpdate = (docs || []).filter((doc) =>
           matchesFilter(doc.data as Record<string, unknown>, filter),
         );
 
         let updatedCount = 0;
         for (const doc of toUpdate) {
           const mergedData = { ...(doc.data as object), ...data };
-          await prisma.appDocument.update({
-            where: { id: doc.id },
-            data: {
-              data: mergedData as Prisma.InputJsonValue,
-            },
-          });
+          await supabase
+            .from("app_documents")
+            .update({
+              data: mergedData,
+            })
+            .eq("id", doc.id);
           updatedCount++;
         }
         count = updatedCount;
@@ -282,18 +307,19 @@ export async function POST(request: NextRequest) {
       }
 
       case "delete": {
-        const docs = await prisma.appDocument.findMany({
-          where: { collectionId: collectionRecord.id },
-          take: 100,
-        });
+        const { data: docs, error: docsError } = await supabase
+          .from("app_documents")
+          .select("*")
+          .eq("collection_id", collectionRecord.id)
+          .limit(100);
 
-        const toDelete = docs.find((doc) =>
+        const toDelete = docs?.find((doc) =>
           matchesFilter(doc.data as Record<string, unknown>, filter),
         );
         if (!toDelete) {
           result = { deletedCount: 0 };
         } else {
-          await prisma.appDocument.delete({ where: { id: toDelete.id } });
+          await supabase.from("app_documents").delete().eq("id", toDelete.id);
           result = {
             deletedCount: 1,
             deleted: { id: toDelete.id, ...(toDelete.data as object) },
@@ -303,17 +329,18 @@ export async function POST(request: NextRequest) {
       }
 
       case "deleteMany": {
-        const docs = await prisma.appDocument.findMany({
-          where: { collectionId: collectionRecord.id },
-        });
+        const { data: docs, error: docsError } = await supabase
+          .from("app_documents")
+          .select("*")
+          .eq("collection_id", collectionRecord.id);
 
-        const toDelete = docs.filter((doc) =>
+        const toDelete = (docs || []).filter((doc) =>
           matchesFilter(doc.data as Record<string, unknown>, filter),
         );
 
         let deletedCount = 0;
         for (const doc of toDelete) {
-          await prisma.appDocument.delete({ where: { id: doc.id } });
+          await supabase.from("app_documents").delete().eq("id", doc.id);
           deletedCount++;
         }
         count = deletedCount;
@@ -322,11 +349,12 @@ export async function POST(request: NextRequest) {
       }
 
       case "count": {
-        const docs = await prisma.appDocument.findMany({
-          where: { collectionId: collectionRecord.id },
-        });
+        const { data: docs, error: docsError } = await supabase
+          .from("app_documents")
+          .select("*")
+          .eq("collection_id", collectionRecord.id);
 
-        const filtered = docs.filter((doc) =>
+        const filtered = (docs || []).filter((doc) =>
           matchesFilter(doc.data as Record<string, unknown>, filter),
         );
         count = filtered.length;
@@ -350,7 +378,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: "DATABASE,
+      service: "database",
       operation,
       creditsUsed: 1,
       success: true,
@@ -374,7 +402,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: "DATABASE,
+      service: "database",
       operation,
       creditsUsed: 0,
       success: false,

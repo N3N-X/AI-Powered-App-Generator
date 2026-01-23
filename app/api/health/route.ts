@@ -41,7 +41,10 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET() {
   try {
     // Check database connection
-    await prisma.$queryRaw`SELECT 1`;
+    const supabase = await createClient();
+    const { error } = await supabase.from("users").select("id").limit(1);
+
+    if (error) throw error;
 
     return NextResponse.json({
       status: "healthy",

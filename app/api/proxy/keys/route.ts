@@ -3,14 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { generateApiKey } from "@/lib/proxy";
-import type { ProxyService } from "@/lib/supabase/types";
+import { ProxyServiceEnum } from "@/types/proxy";
 
 const CreateKeySchema = z.object({
   projectId: z.string(),
   name: z.string().min(1).max(100).default("Default"),
-  services: z
-    .array(z.nativeEnum(ProxyService))
-    .default(Object.values(ProxyService)),
+  services: z.array(ProxyServiceEnum).default(ProxyServiceEnum.options),
   expiresInDays: z.number().min(1).max(365).optional(),
 });
 
@@ -179,21 +177,27 @@ export async function POST(request: NextRequest) {
 
     const { projectId, name, services, expiresInDays } = parsed.data;
 
-    // Verify user owns the project
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      include: {
-        projects: {
-          where: { id: projectId },
-        },
-      },
-    });
+    const supabase = await createClient();
 
-    if (!user) {
+    // Verify user owns the project
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", uid)
+      .single();
+
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (user.projects.length === 0) {
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("user_id", uid)
+      .single();
+
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
@@ -213,10 +217,10 @@ export async function POST(request: NextRequest) {
 
     // Update expiration if set
     if (expiresAt) {
-      await prisma.projectApiKey.update({
-        where: { id: keyId },
-        data: { expiresAt },
-      });
+      await supabase
+        .from("project_api_keys")
+        .update({ expires_at: expiresAt.toISOString() })
+        .eq("id", keyId);
     }
 
     return NextResponse.json(
@@ -257,37 +261,51 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Verify user owns the project
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      include: {
-        projects: {
-          where: { id: projectId },
-        },
-      },
-    });
+    const supabase = await createClient();
 
-    if (!user || user.projects.length === 0) {
+    // Verify user owns the project
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", uid)
+      .single();
+
+    if (userError || !user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("user_id", uid)
+      .single();
+
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     // Get all keys for the project
-    const keys = await prisma.projectApiKey.findMany({
-      where: { projectId },
-      select: {
-        id: true,
-        name: true,
-        keyPrefix: true,
-        services: true,
-        active: true,
-        lastUsedAt: true,
-        createdAt: true,
-        expiresAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const { data: keys, error: keysError } = await supabase
+      .from("project_api_keys")
+      .select(
+        "id, name, key_prefix, services, active, last_used_at, created_at, expires_at",
+      )
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false });
 
-    return NextResponse.json({ keys });
+    const formattedKeys = keys?.map((k) => ({
+      id: k.id,
+      name: k.name,
+      keyPrefix: k.key_prefix,
+      services: k.services,
+      active: k.active,
+      lastUsedAt: k.last_used_at,
+      createdAt: k.created_at,
+      expiresAt: k.expires_at,
+    }));
+
+    return NextResponse.json({ keys: formattedKeys || [] });
   } catch (error) {
     console.error("List API keys error:", error);
     return NextResponse.json(
@@ -316,32 +334,37 @@ export async function DELETE(request: NextRequest) {
 
     const { keyId } = parsed.data;
 
-    // Get the key and verify ownership
-    const key = await prisma.projectApiKey.findUnique({
-      where: { id: keyId },
-      include: {
-        project: {
-          include: {
-            user: true,
-          },
-        },
-      },
-    });
+    const supabase = await createClient();
 
-    if (!key) {
+    // Get the key with project info
+    const { data: key, error: keyError } = await supabase
+      .from("project_api_keys")
+      .select("id, project_id")
+      .eq("id", keyId)
+      .single();
+
+    if (keyError || !key) {
       return NextResponse.json({ error: "Key not found" }, { status: 404 });
     }
 
+    // Get project to verify ownership
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("user_id")
+      .eq("id", key.project_id)
+      .single();
+
+    if (projectError || !project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
     // Verify ownership using Firebase UID
-    const ownerMatches = key.project.user.id === uid;
-    if (!ownerMatches) {
+    if (project.user_id !== uid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Delete the key
-    await prisma.projectApiKey.delete({
-      where: { id: keyId },
-    });
+    await supabase.from("project_api_keys").delete().eq("id", keyId);
 
     return NextResponse.json({
       success: true,

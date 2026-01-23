@@ -68,35 +68,41 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = BuildRequestSchema.parse(body);
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      include: {
-        projects: {
-          where: { id: data.projectId },
-          include: {
-            apiKeys: {
-              where: { active: true },
-              take: 1,
-            },
-          },
-        },
-      },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "User not found" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    const project = user.projects[0];
-    if (!project) {
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", data.projectId)
+      .eq("user_id", uid)
+      .single();
+
+    if (projectError || !project) {
       return new Response(JSON.stringify({ error: "Project not found" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    // Get active API key for the project
+    const { data: apiKeys } = await supabase
+      .from("project_api_keys")
+      .select("*")
+      .eq("project_id", project.id)
+      .eq("active", true)
+      .limit(1);
 
     // Check credits
     const creditCost = CREDIT_COSTS.codeGeneration;
@@ -124,7 +130,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existingCode = project.codeFiles as CodeFiles;
+    const existingCode = project.code_files as CodeFiles;
 
     // Get API base URL from request headers
     // This ensures localhost works during development
@@ -138,11 +144,11 @@ export async function POST(request: NextRequest) {
 
     // Decrypt the project's API key for injection into generated code
     let decryptedApiKey: string | undefined;
-    const activeApiKey = project.apiKeys[0];
-    if (activeApiKey?.keyEncrypted) {
+    const activeApiKey = apiKeys?.[0];
+    if (activeApiKey?.key_encrypted) {
       try {
         const { decrypt } = await import("@/lib/encrypt");
-        decryptedApiKey = await decrypt(activeApiKey.keyEncrypted);
+        decryptedApiKey = await decrypt(activeApiKey.key_encrypted);
       } catch (error) {
         console.error("Failed to decrypt API key:", error);
         // Continue without injecting key - user will need to add it manually
@@ -187,32 +193,30 @@ export async function POST(request: NextRequest) {
             ...result.files,
           };
 
-          await prisma.project.update({
-            where: { id: project.id },
-            data: {
-              codeFiles: updatedCodeFiles,
-              updatedAt: new Date(),
-            },
+          await supabase
+            .from("projects")
+            .update({
+              code_files: updatedCodeFiles,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", project.id);
+
+          await supabase.from("prompt_history").insert({
+            prompt: `[Confirmed Build] ${data.spec.name}: ${data.spec.features.join(", ")}`,
+            response: JSON.stringify(result.files),
+            model: "grok",
+            tokens: 0,
+            user_id: user.id,
+            project_id: project.id,
           });
 
-          await prisma.promptHistory.create({
-            data: {
-              prompt: `[Confirmed Build] ${data.spec.name}: ${data.spec.features.join(", ")}`,
-              response: JSON.stringify(result.files),
-              model: "grok",
-              tokens: 0,
-              userId: user.id,
-              projectId: project.id,
-            },
-          });
-
-          await prisma.user.update({
-            where: { id: user.id },
-            data: {
-              credits: { decrement: creditCost },
-              totalCreditsUsed: { increment: creditCost },
-            },
-          });
+          await supabase
+            .from("users")
+            .update({
+              credits: user.credits - creditCost,
+              total_credits_used: (user.total_credits_used || 0) + creditCost,
+            })
+            .eq("id", user.id);
 
           await incrementUsage(user.id);
 

@@ -68,17 +68,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = PushCodeRequestSchema.parse(body);
 
-    // Get user with project
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      include: {
-        projects: {
-          where: { id: data.projectId },
-        },
-      },
-    });
+    const supabase = await createClient();
 
-    if (!user) {
+    // Get user
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", uid)
+      .single();
+
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -90,19 +89,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!user.githubTokenEncrypted) {
+    if (!user.github_token_encrypted) {
       return NextResponse.json(
         { error: "GitHub account not connected" },
         { status: 400 },
       );
     }
 
-    const project = user.projects[0];
-    if (!project) {
+    // Get project
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", data.projectId)
+      .eq("user_id", uid)
+      .single();
+
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    if (!project.githubRepo) {
+    if (!project.github_repo) {
       return NextResponse.json(
         { error: "Project not connected to a GitHub repository" },
         { status: 400 },
@@ -110,13 +116,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Decrypt GitHub token
-    const githubToken = await decrypt(user.githubTokenEncrypted);
+    const githubToken = await decrypt(user.github_token_encrypted);
 
     // Parse repo info
-    const [owner, repoName] = project.githubRepo.split("/");
+    const [owner, repoName] = project.github_repo.split("/");
 
     // Push code
-    const codeFiles = project.codeFiles as CodeFiles;
+    const codeFiles = project.code_files as CodeFiles;
     const { commitSha, commitUrl } = await pushCodeToRepo(githubToken, {
       owner,
       repo: repoName,

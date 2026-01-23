@@ -78,21 +78,25 @@ export async function POST(request: NextRequest) {
     const data = RefineRequestSchema.parse(body);
 
     // Get user and project
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      include: {
-        projects: {
-          where: { id: data.projectId },
-        },
-      },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const project = user.projects[0];
-    if (!project) {
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", data.projectId)
+      .eq("user_id", uid)
+      .single();
+
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
@@ -124,7 +128,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine AI model
-    const hasCustomClaudeKey = !!user.claudeKeyEncrypted;
+    const hasCustomClaudeKey = !!user.claude_key_encrypted;
     let model =
       data.model || getModelForPlan(user.plan as Plan, hasCustomClaudeKey);
 
@@ -134,16 +138,16 @@ export async function POST(request: NextRequest) {
 
     // Get custom Claude key if available
     let userClaudeKey: string | undefined;
-    if (model === "claude" && user.claudeKeyEncrypted) {
+    if (model === "claude" && user.claude_key_encrypted) {
       try {
-        userClaudeKey = await decrypt(user.claudeKeyEncrypted);
+        userClaudeKey = await decrypt(user.claude_key_encrypted);
       } catch (error) {
         console.error("Failed to decrypt Claude key:", error);
       }
     }
 
     // Get existing code files
-    const existingCode = project.codeFiles as CodeFiles;
+    const existingCode = project.code_files as CodeFiles;
 
     // Filter to target files if specified
     let codeToRefine = existingCode;
@@ -182,34 +186,32 @@ export async function POST(request: NextRequest) {
     };
 
     // Update project
-    await prisma.project.update({
-      where: { id: project.id },
-      data: {
-        codeFiles: updatedCodeFiles,
-        updatedAt: new Date(),
-      },
-    });
+    await supabase
+      .from("projects")
+      .update({
+        code_files: updatedCodeFiles,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", project.id);
 
     // Save prompt history
-    await prisma.promptHistory.create({
-      data: {
-        prompt: `[REFINE] ${data.prompt}`,
-        response: JSON.stringify(result.codeFiles),
-        model: result.model,
-        tokens: result.tokensUsed,
-        userId: user.id,
-        projectId: project.id,
-      },
+    await supabase.from("prompt_history").insert({
+      prompt: `[REFINE] ${data.prompt}`,
+      response: JSON.stringify(result.codeFiles),
+      model: result.model,
+      tokens: result.tokensUsed,
+      user_id: user.id,
+      project_id: project.id,
     });
 
     // Deduct credits
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        credits: { decrement: creditCost },
-        totalCreditsUsed: { increment: creditCost },
-      },
-    });
+    await supabase
+      .from("users")
+      .update({
+        credits: user.credits - creditCost,
+        total_credits_used: (user.total_credits_used || 0) + creditCost,
+      })
+      .eq("id", user.id);
 
     await incrementUsage(user.id);
 

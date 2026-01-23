@@ -2,7 +2,6 @@ import { getAuthenticatedUser } from "@/lib/auth-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { Prisma } from "@prisma/client";
 
 // Validate file paths to prevent path traversal attacks
 const safeFilePathRegex = /^[a-zA-Z0-9_\-./]+$/;
@@ -56,22 +55,25 @@ export async function GET(
 
     const { id } = await params;
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const project = await prisma.project.findFirst({
-      where: {
-        id,
-        userId: user.id,
-      },
-    });
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!project) {
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
@@ -153,23 +155,26 @@ export async function PATCH(
     const body = await request.json();
     const data = updateProjectSchema.parse(body);
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Verify ownership
-    const existingProject = await prisma.project.findFirst({
-      where: {
-        id,
-        userId: user.id,
-      },
-    });
+    const { data: existingProject, error: projectError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!existingProject) {
+    if (projectError || !existingProject) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
@@ -194,23 +199,27 @@ export async function PATCH(
     }
 
     // Build update data
-    const updateData: Prisma.ProjectUpdateInput = {
-      updatedAt: new Date(),
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
     };
 
     if (data.name) updateData.name = data.name;
     if (data.description !== undefined)
       updateData.description = data.description;
-    if (sanitizedCodeFiles)
-      updateData.codeFiles = sanitizedCodeFiles as Prisma.InputJsonValue;
-    if (data.appConfig)
-      updateData.appConfig = data.appConfig as Prisma.InputJsonValue;
+    if (sanitizedCodeFiles) updateData.code_files = sanitizedCodeFiles;
+    if (data.appConfig) updateData.app_config = data.appConfig;
 
     // Update project
-    const project = await prisma.project.update({
-      where: { id },
-      data: updateData,
-    });
+    const { data: project, error: updateError } = await supabase
+      .from("projects")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
 
     return NextResponse.json({ project });
   } catch (error) {
@@ -271,23 +280,25 @@ export async function DELETE(
 
     const { id } = await params;
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Verify ownership and delete
-    const deleted = await prisma.project.deleteMany({
-      where: {
-        id,
-        userId: user.id,
-      },
-    });
+    const { error: deleteError } = await supabase
+      .from("projects")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
 
-    if (deleted.count === 0) {
+    if (deleteError) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 

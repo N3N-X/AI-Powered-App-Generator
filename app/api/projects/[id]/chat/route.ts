@@ -19,28 +19,34 @@ export async function POST(
     const { messages } = body;
 
     // Get user
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Verify project ownership
-    const project = await prisma.project.findFirst({
-      where: { id, userId: user.id },
-    });
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!project) {
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     // Update chat history
-    await prisma.project.update({
-      where: { id },
-      data: { chatHistory: messages },
-    });
+    await supabase
+      .from("projects")
+      .update({ chat_history: messages })
+      .eq("id", id);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -66,28 +72,31 @@ export async function DELETE(
 
   try {
     // Get user
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Verify project ownership
-    const project = await prisma.project.findFirst({
-      where: { id, userId: user.id },
-    });
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!project) {
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     // Clear chat history
-    await prisma.project.update({
-      where: { id },
-      data: { chatHistory: [] },
-    });
+    await supabase.from("projects").update({ chat_history: [] }).eq("id", id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

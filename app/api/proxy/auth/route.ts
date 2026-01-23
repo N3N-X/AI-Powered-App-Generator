@@ -18,7 +18,6 @@ export async function OPTIONS() {
   return proxyCorsOptions();
 }
 import { AppAuthProxyRequestSchema } from "@/types/proxy";
-import { ProxyService, Prisma } from "@prisma/client";
 import { createClient } from "@/lib/supabase/server";
 
 // Session token validity: 30 days
@@ -58,7 +57,7 @@ export async function POST(request: NextRequest) {
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, "APP_AUTH)) {
+  if (!hasServiceAccess(services, "app_auth")) {
     return proxyError(
       "This API key does not have access to the App Auth service",
       "FORBIDDEN",
@@ -105,6 +104,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const supabase = await createClient();
+
   try {
     let result: {
       success: boolean;
@@ -125,16 +126,14 @@ export async function POST(request: NextRequest) {
     switch (requestData.operation) {
       case "signup": {
         // Check if user already exists
-        const existing = await prisma.appUser.findUnique({
-          where: {
-            projectId_email: {
-              projectId,
-              email: requestData.email.toLowerCase(),
-            },
-          },
-        });
+        const { data: existing, error: existingError } = await supabase
+          .from("app_users")
+          .select("*")
+          .eq("project_id", projectId)
+          .eq("email", requestData.email.toLowerCase())
+          .single();
 
-        if (existing) {
+        if (existing && !existingError) {
           return proxyError(
             "A user with this email already exists",
             "USER_EXISTS",
@@ -149,16 +148,22 @@ export async function POST(request: NextRequest) {
         const verifyToken = randomBytes(32).toString("hex");
 
         // Create user
-        const newUser = await prisma.appUser.create({
-          data: {
-            projectId,
+        const { data: newUser, error: createError } = await supabase
+          .from("app_users")
+          .insert({
+            project_id: projectId,
             email: requestData.email.toLowerCase(),
-            passwordHash,
+            password_hash: passwordHash,
             name: requestData.name,
-            metadata: requestData.metadata as Prisma.InputJsonValue | undefined,
-            verifyToken,
-          },
-        });
+            metadata: requestData.metadata,
+            verify_token: verifyToken,
+          })
+          .select()
+          .single();
+
+        if (createError || !newUser) {
+          throw new Error("Failed to create user");
+        }
 
         // Create session
         const { sessionToken, expiresAt } = await createSession(
@@ -177,16 +182,14 @@ export async function POST(request: NextRequest) {
       }
 
       case "login": {
-        const user = await prisma.appUser.findUnique({
-          where: {
-            projectId_email: {
-              projectId,
-              email: requestData.email.toLowerCase(),
-            },
-          },
-        });
+        const { data: user, error: userError } = await supabase
+          .from("app_users")
+          .select("*")
+          .eq("project_id", projectId)
+          .eq("email", requestData.email.toLowerCase())
+          .single();
 
-        if (!user || !user.active) {
+        if (userError || !user || !user.active) {
           return proxyError(
             "Invalid email or password",
             "INVALID_CREDENTIALS",
@@ -197,7 +200,7 @@ export async function POST(request: NextRequest) {
         // Verify password
         const validPassword = await bcrypt.compare(
           requestData.password,
-          user.passwordHash,
+          user.password_hash,
         );
         if (!validPassword) {
           return proxyError(
@@ -208,10 +211,10 @@ export async function POST(request: NextRequest) {
         }
 
         // Update last login
-        await prisma.appUser.update({
-          where: { id: user.id },
-          data: { lastLoginAt: new Date() },
-        });
+        await supabase
+          .from("app_users")
+          .update({ last_login_at: new Date().toISOString() })
+          .eq("id", user.id);
 
         // Create session
         const { sessionToken, expiresAt } = await createSession(
@@ -231,9 +234,7 @@ export async function POST(request: NextRequest) {
       case "logout": {
         // Find and delete session
         const tokenHash = hashToken(requestData.sessionToken);
-        await prisma.appSession.deleteMany({
-          where: { token: tokenHash },
-        });
+        await supabase.from("app_sessions").delete().eq("token", tokenHash);
 
         result = {
           success: true,
@@ -243,7 +244,10 @@ export async function POST(request: NextRequest) {
       }
 
       case "me": {
-        const session = await validateSession(requestData.sessionToken);
+        const session = await validateSession(
+          requestData.sessionToken,
+          supabase,
+        );
         if (!session) {
           return proxyError(
             "Invalid or expired session",
@@ -252,11 +256,13 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const user = await prisma.appUser.findUnique({
-          where: { id: session.appUserId },
-        });
+        const { data: user, error: userError } = await supabase
+          .from("app_users")
+          .select("*")
+          .eq("id", session.app_user_id)
+          .single();
 
-        if (!user || !user.active) {
+        if (userError || !user || !user.active) {
           return proxyError("User not found", "USER_NOT_FOUND", 404);
         }
 
@@ -268,7 +274,10 @@ export async function POST(request: NextRequest) {
       }
 
       case "updateProfile": {
-        const session = await validateSession(requestData.sessionToken);
+        const session = await validateSession(
+          requestData.sessionToken,
+          supabase,
+        );
         if (!session) {
           return proxyError(
             "Invalid or expired session",
@@ -277,17 +286,23 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const updateData: Prisma.AppUserUpdateInput = {};
+        const updateData: Record<string, unknown> = {};
         if (requestData.name !== undefined) updateData.name = requestData.name;
         if (requestData.avatarUrl !== undefined)
-          updateData.avatarUrl = requestData.avatarUrl;
+          updateData.avatar_url = requestData.avatarUrl;
         if (requestData.metadata !== undefined)
-          updateData.metadata = requestData.metadata as Prisma.InputJsonValue;
+          updateData.metadata = requestData.metadata;
 
-        const updatedUser = await prisma.appUser.update({
-          where: { id: session.appUserId },
-          data: updateData,
-        });
+        const { data: updatedUser, error: updateError } = await supabase
+          .from("app_users")
+          .update(updateData)
+          .eq("id", session.app_user_id)
+          .select()
+          .single();
+
+        if (updateError || !updatedUser) {
+          throw new Error("Failed to update user");
+        }
 
         result = {
           success: true,
@@ -298,7 +313,10 @@ export async function POST(request: NextRequest) {
       }
 
       case "changePassword": {
-        const session = await validateSession(requestData.sessionToken);
+        const session = await validateSession(
+          requestData.sessionToken,
+          supabase,
+        );
         if (!session) {
           return proxyError(
             "Invalid or expired session",
@@ -307,18 +325,20 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const user = await prisma.appUser.findUnique({
-          where: { id: session.appUserId },
-        });
+        const { data: user, error: userError } = await supabase
+          .from("app_users")
+          .select("*")
+          .eq("id", session.app_user_id)
+          .single();
 
-        if (!user) {
+        if (userError || !user) {
           return proxyError("User not found", "USER_NOT_FOUND", 404);
         }
 
         // Verify current password
         const validPassword = await bcrypt.compare(
           requestData.currentPassword,
-          user.passwordHash,
+          user.password_hash,
         );
         if (!validPassword) {
           return proxyError(
@@ -331,19 +351,18 @@ export async function POST(request: NextRequest) {
         // Hash new password
         const newPasswordHash = await bcrypt.hash(requestData.newPassword, 12);
 
-        await prisma.appUser.update({
-          where: { id: user.id },
-          data: { passwordHash: newPasswordHash },
-        });
+        await supabase
+          .from("app_users")
+          .update({ password_hash: newPasswordHash })
+          .eq("id", user.id);
 
         // Invalidate all other sessions
         const currentTokenHash = hashToken(requestData.sessionToken);
-        await prisma.appSession.deleteMany({
-          where: {
-            appUserId: user.id,
-            token: { not: currentTokenHash },
-          },
-        });
+        await supabase
+          .from("app_sessions")
+          .delete()
+          .eq("app_user_id", user.id)
+          .neq("token", currentTokenHash);
 
         result = {
           success: true,
@@ -353,28 +372,26 @@ export async function POST(request: NextRequest) {
       }
 
       case "forgotPassword": {
-        const user = await prisma.appUser.findUnique({
-          where: {
-            projectId_email: {
-              projectId,
-              email: requestData.email.toLowerCase(),
-            },
-          },
-        });
+        const { data: user, error: userError } = await supabase
+          .from("app_users")
+          .select("*")
+          .eq("project_id", projectId)
+          .eq("email", requestData.email.toLowerCase())
+          .single();
 
         // Always return success to prevent email enumeration
-        if (user && user.active) {
+        if (user && !userError && user.active) {
           // Generate reset token
           const resetToken = randomBytes(32).toString("hex");
           const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-          await prisma.appUser.update({
-            where: { id: user.id },
-            data: {
-              resetToken,
-              resetExpires,
-            },
-          });
+          await supabase
+            .from("app_users")
+            .update({
+              reset_token: resetToken,
+              reset_expires: resetExpires.toISOString(),
+            })
+            .eq("id", user.id);
 
           // Note: In a real implementation, you would send an email here
           // using the email proxy with the reset token
@@ -389,15 +406,16 @@ export async function POST(request: NextRequest) {
       }
 
       case "resetPassword": {
-        const user = await prisma.appUser.findFirst({
-          where: {
-            projectId,
-            resetToken: requestData.token,
-            resetExpires: { gt: new Date() },
-          },
-        });
+        const { data: users, error: usersError } = await supabase
+          .from("app_users")
+          .select("*")
+          .eq("project_id", projectId)
+          .eq("reset_token", requestData.token)
+          .gt("reset_expires", new Date().toISOString());
 
-        if (!user) {
+        const user = users?.[0];
+
+        if (usersError || !user) {
           return proxyError(
             "Invalid or expired reset token",
             "INVALID_TOKEN",
@@ -408,19 +426,17 @@ export async function POST(request: NextRequest) {
         // Hash new password
         const newPasswordHash = await bcrypt.hash(requestData.newPassword, 12);
 
-        await prisma.appUser.update({
-          where: { id: user.id },
-          data: {
-            passwordHash: newPasswordHash,
-            resetToken: null,
-            resetExpires: null,
-          },
-        });
+        await supabase
+          .from("app_users")
+          .update({
+            password_hash: newPasswordHash,
+            reset_token: null,
+            reset_expires: null,
+          })
+          .eq("id", user.id);
 
         // Invalidate all sessions
-        await prisma.appSession.deleteMany({
-          where: { appUserId: user.id },
-        });
+        await supabase.from("app_sessions").delete().eq("app_user_id", user.id);
 
         result = {
           success: true,
@@ -431,24 +447,25 @@ export async function POST(request: NextRequest) {
       }
 
       case "verifyEmail": {
-        const user = await prisma.appUser.findFirst({
-          where: {
-            projectId,
-            verifyToken: requestData.token,
-          },
-        });
+        const { data: users, error: usersError } = await supabase
+          .from("app_users")
+          .select("*")
+          .eq("project_id", projectId)
+          .eq("verify_token", requestData.token);
 
-        if (!user) {
+        const user = users?.[0];
+
+        if (usersError || !user) {
           return proxyError("Invalid verification token", "INVALID_TOKEN", 400);
         }
 
-        await prisma.appUser.update({
-          where: { id: user.id },
-          data: {
-            emailVerified: true,
-            verifyToken: null,
-          },
-        });
+        await supabase
+          .from("app_users")
+          .update({
+            email_verified: true,
+            verify_token: null,
+          })
+          .eq("id", user.id);
 
         result = {
           success: true,
@@ -458,7 +475,10 @@ export async function POST(request: NextRequest) {
       }
 
       case "deleteAccount": {
-        const session = await validateSession(requestData.sessionToken);
+        const session = await validateSession(
+          requestData.sessionToken,
+          supabase,
+        );
         if (!session) {
           return proxyError(
             "Invalid or expired session",
@@ -467,27 +487,27 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const user = await prisma.appUser.findUnique({
-          where: { id: session.appUserId },
-        });
+        const { data: user, error: userError } = await supabase
+          .from("app_users")
+          .select("*")
+          .eq("id", session.app_user_id)
+          .single();
 
-        if (!user) {
+        if (userError || !user) {
           return proxyError("User not found", "USER_NOT_FOUND", 404);
         }
 
         // Verify password
         const validPassword = await bcrypt.compare(
           requestData.password,
-          user.passwordHash,
+          user.password_hash,
         );
         if (!validPassword) {
           return proxyError("Password is incorrect", "INVALID_PASSWORD", 401);
         }
 
-        // Delete user and all sessions (cascade)
-        await prisma.appUser.delete({
-          where: { id: user.id },
-        });
+        // Delete user and all sessions (cascade handled by DB)
+        await supabase.from("app_users").delete().eq("id", user.id);
 
         result = {
           success: true,
@@ -508,7 +528,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: "APP_AUTH,
+      service: "app_auth",
       operation: requestData.operation,
       creditsUsed: 1,
       success: true,
@@ -528,7 +548,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: "APP_AUTH,
+      service: "app_auth",
       operation: requestData.operation,
       creditsUsed: 0,
       success: false,
@@ -558,17 +578,17 @@ async function createSession(
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
 
-  await prisma.appSession.create({
-    data: {
-      appUserId,
-      token: tokenHash,
-      expiresAt,
-      userAgent: request.headers.get("user-agent") || undefined,
-      ipAddress:
-        request.headers.get("x-forwarded-for")?.split(",")[0] ||
-        request.headers.get("x-real-ip") ||
-        undefined,
-    },
+  const supabase = await createClient();
+
+  await supabase.from("app_sessions").insert({
+    app_user_id: appUserId,
+    token: tokenHash,
+    expires_at: expiresAt.toISOString(),
+    user_agent: request.headers.get("user-agent") || undefined,
+    ip_address:
+      request.headers.get("x-forwarded-for")?.split(",")[0] ||
+      request.headers.get("x-real-ip") ||
+      undefined,
   });
 
   return { sessionToken: rawToken, expiresAt };
@@ -577,30 +597,35 @@ async function createSession(
 /**
  * Validate a session token and return the session if valid
  */
-async function validateSession(rawToken: string) {
+async function validateSession(
+  rawToken: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+) {
   const tokenHash = hashToken(rawToken);
 
-  const session = await prisma.appSession.findUnique({
-    where: { token: tokenHash },
-  });
+  const { data: session, error: sessionError } = await supabase
+    .from("app_sessions")
+    .select("*")
+    .eq("token", tokenHash)
+    .single();
 
-  if (!session || session.expiresAt < new Date()) {
+  if (sessionError || !session || new Date(session.expires_at) < new Date()) {
     // Clean up expired session
     if (session) {
-      await prisma.appSession
-        .delete({ where: { id: session.id } })
-        .catch(() => {});
+      try {
+        await supabase.from("app_sessions").delete().eq("id", session.id);
+      } catch {}
     }
     return null;
   }
 
   // Update last active
-  await prisma.appSession
-    .update({
-      where: { id: session.id },
-      data: { lastActiveAt: new Date() },
-    })
-    .catch(() => {});
+  try {
+    await supabase
+      .from("app_sessions")
+      .update({ last_active_at: new Date().toISOString() })
+      .eq("id", session.id);
+  } catch {}
 
   return session;
 }
@@ -619,18 +644,18 @@ function formatUser(user: {
   id: string;
   email: string;
   name: string | null;
-  avatarUrl: string | null;
-  emailVerified: boolean;
+  avatar_url: string | null;
+  email_verified: boolean;
   metadata: unknown;
-  createdAt: Date;
+  created_at: string;
 }) {
   return {
     id: user.id,
     email: user.email,
     name: user.name,
-    avatarUrl: user.avatarUrl,
-    emailVerified: user.emailVerified,
+    avatarUrl: user.avatar_url,
+    emailVerified: user.email_verified,
     metadata: user.metadata,
-    createdAt: user.createdAt.toISOString(),
+    createdAt: user.created_at,
   };
 }

@@ -172,22 +172,21 @@ export async function GET(request: NextRequest) {
     }
 
     // Find project by subdomain or custom domain
-    const project = await prisma.project.findFirst({
-      where: subdomain
-        ? { subdomain, platform: "WEB" }
-        : { customDomain, platform: "WEB" },
-      select: {
-        id: true,
-        name: true,
-        subdomain: true,
-        customDomain: true,
-        domainVerified: true,
-        codeFiles: true,
-        platform: true,
-      },
-    });
+    const supabase = await createClient();
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select(
+        "id, name, subdomain, custom_domain, domain_verified, code_files, platform",
+      )
+      .eq("platform", "WEB")
+      .or(
+        subdomain
+          ? `subdomain.eq.${subdomain}`
+          : `custom_domain.eq.${customDomain}`,
+      )
+      .single();
 
-    if (!project) {
+    if (projectError || !project) {
       // Log potential probing attempts
       console.info(
         `[serve] Project not found: ${subdomain || customDomain} from IP: ${clientIp}`,
@@ -204,7 +203,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify custom domain is actually verified (double-check)
-    if (customDomain && !project.domainVerified) {
+    if (customDomain && !project.domain_verified) {
       console.warn(
         `[serve] Unverified custom domain access attempt: ${customDomain} from IP: ${clientIp}`,
       );
@@ -217,7 +216,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const codeFiles = (project.codeFiles as CodeFiles) || {};
+    const codeFiles = (project.code_files as CodeFiles) || {};
 
     // Check if there's any code to serve
     if (Object.keys(codeFiles).length === 0) {

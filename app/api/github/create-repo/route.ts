@@ -90,17 +90,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = CreateRepoRequestSchema.parse(body);
 
-    // Get user with project
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      include: {
-        projects: {
-          where: { id: data.projectId },
-        },
-      },
-    });
+    const supabase = await createClient();
 
-    if (!user) {
+    // Get user
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", uid)
+      .single();
+
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -112,20 +111,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!user.githubTokenEncrypted) {
+    if (!user.github_token_encrypted) {
       return NextResponse.json(
         { error: "GitHub account not connected" },
         { status: 400 },
       );
     }
 
-    const project = user.projects[0];
-    if (!project) {
+    // Get project
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", data.projectId)
+      .eq("user_id", uid)
+      .single();
+
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     // Decrypt GitHub token
-    const githubToken = await decrypt(user.githubTokenEncrypted);
+    const githubToken = await decrypt(user.github_token_encrypted);
 
     // Create repository
     const repo = await createRepository(githubToken, {
@@ -136,7 +142,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Prepare files to push
-    const codeFiles = project.codeFiles as CodeFiles;
+    const codeFiles = project.code_files as CodeFiles;
     const filesToPush: CodeFiles = {
       ...codeFiles,
       ".gitignore": generateGitignore(),
@@ -155,13 +161,13 @@ export async function POST(request: NextRequest) {
     });
 
     // Update project with GitHub info
-    await prisma.project.update({
-      where: { id: project.id },
-      data: {
-        githubRepo: repo.fullName,
-        githubUrl: repo.htmlUrl,
-      },
-    });
+    await supabase
+      .from("projects")
+      .update({
+        github_repo: repo.fullName,
+        github_url: repo.htmlUrl,
+      })
+      .eq("id", project.id);
 
     return NextResponse.json({
       success: true,

@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, "SMS)) {
+  if (!hasServiceAccess(services, "sms")) {
     return proxyError(
       "This API key does not have access to the SMS service",
       "FORBIDDEN",
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
         apiKeyId,
         projectId,
         userId,
-        service: "SMS,
+        service: "sms",
         operation: "send",
         creditsUsed: 0,
         success: false,
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: "SMS,
+      service: "sms",
       operation: "send",
       creditsUsed: creditsRequired,
       success: true,
@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
       apiKeyId,
       projectId,
       userId,
-      service: "SMS,
+      service: "sms",
       operation: "send",
       creditsUsed: 0,
       success: false,

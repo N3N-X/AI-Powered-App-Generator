@@ -90,16 +90,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", uid)
+      .single();
 
-    if (!user) {
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Check if user already has a Stripe customer ID
-    let customerId = user.stripeCustomerId;
+    let customerId = user.stripe_customer_id;
 
     if (!customerId) {
       // Create a new Stripe customer
@@ -114,10 +117,10 @@ export async function POST(request: NextRequest) {
       customerId = customer.id;
 
       // Save the customer ID to the database
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { stripeCustomerId: customerId },
-      });
+      await supabase
+        .from("users")
+        .update({ stripe_customer_id: customerId })
+        .eq("id", user.id);
     }
 
     // Create checkout session for one-time payment

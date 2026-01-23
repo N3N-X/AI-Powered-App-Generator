@@ -26,40 +26,46 @@ export async function POST(
 
     const { id } = await params;
 
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-    });
+    const supabase = await createClient();
 
-    if (!user) {
+    // Get user
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", uid)
+      .single();
+
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const project = await prisma.project.findFirst({
-      where: {
-        id,
-        userId: user.id,
-      },
-    });
+    // Get project
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!project) {
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    if (!project.customDomain) {
+    if (!project.custom_domain) {
       return NextResponse.json(
         { error: "No custom domain configured" },
         { status: 400 },
       );
     }
 
-    if (project.domainVerified) {
+    if (project.domain_verified) {
       return NextResponse.json({
         verified: true,
         message: "Domain is already verified",
       });
     }
 
-    const domain = project.customDomain;
+    const domain = project.custom_domain;
     const expectedTxtRecord = `rux-verify=${id}`;
 
     let txtVerified = false;
@@ -115,13 +121,13 @@ export async function POST(
 
     if (verified) {
       // Update project as verified
-      await prisma.project.update({
-        where: { id },
-        data: {
-          domainVerified: true,
-          updatedAt: new Date(),
-        },
-      });
+      await supabase
+        .from("projects")
+        .update({
+          domain_verified: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
 
       return NextResponse.json({
         verified: true,

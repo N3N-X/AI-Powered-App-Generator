@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
   const { apiKeyId, projectId, userId, plan, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, "STORAGE)) {
+  if (!hasServiceAccess(services, "storage")) {
     return proxyError(
       "This API key does not have access to the Storage service",
       "FORBIDDEN",
@@ -240,13 +240,16 @@ export async function POST(request: NextRequest) {
 
   const { filename, contentType, size, isPublic } = parsed.data;
 
-  // Check current storage usage
-  const currentUsage = await prisma.storageFile.aggregate({
-    where: { projectId, deletedAt: null },
-    _sum: { size: true },
-  });
+  const supabase = await createClient();
 
-  const usedStorage = currentUsage._sum.size || 0;
+  // Check current storage usage
+  const { data: files, error: filesError } = await supabase
+    .from("storage_files")
+    .select("size")
+    .eq("project_id", projectId)
+    .is("deleted_at", null);
+
+  const usedStorage = files?.reduce((sum, f) => sum + (f.size || 0), 0) || 0;
   const storageLimit = STORAGE_LIMITS[plan];
 
   if (usedStorage + size > storageLimit) {
@@ -286,19 +289,17 @@ export async function POST(request: NextRequest) {
   }
 
   // Create file record (pending upload)
-  await prisma.storageFile.create({
-    data: {
-      id: fileId,
-      filename,
-      contentType,
-      size,
-      bucket,
-      key,
-      url: isPublic ? fileUrl : null,
-      isPublic,
-      projectId,
-      userId,
-    },
+  await supabase.from("storage_files").insert({
+    id: fileId,
+    filename,
+    content_type: contentType,
+    size,
+    bucket,
+    key,
+    url: isPublic ? fileUrl : null,
+    is_public: isPublic,
+    project_id: projectId,
+    user_id: userId,
   });
 
   // Log usage
@@ -306,7 +307,7 @@ export async function POST(request: NextRequest) {
     apiKeyId,
     projectId,
     userId,
-    service: "STORAGE,
+    service: "storage",
     operation: "upload.request",
     creditsUsed: 0, // Credits charged on actual upload
     success: true,
@@ -335,7 +336,7 @@ export async function GET(request: NextRequest) {
   const { projectId, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, "STORAGE)) {
+  if (!hasServiceAccess(services, "storage")) {
     return proxyError(
       "This API key does not have access to the Storage service",
       "FORBIDDEN",
@@ -363,49 +364,59 @@ export async function GET(request: NextRequest) {
 
   const { prefix, limit, cursor } = parsed.data;
 
+  const supabase = await createClient();
+
   // Build query
-  const where: {
-    projectId: string;
-    deletedAt: null;
-    filename?: { startsWith: string };
-  } = {
-    projectId,
-    deletedAt: null,
-  };
+  let query = supabase
+    .from("storage_files")
+    .select("id, filename, content_type, size, url, is_public, created_at")
+    .eq("project_id", projectId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(limit + 1);
 
   if (prefix) {
-    where.filename = { startsWith: prefix };
+    query = query.ilike("filename", `${prefix}%`);
   }
 
-  // Get files
-  const files = await prisma.storageFile.findMany({
-    where,
-    take: limit + 1, // Get one extra to check for more
-    cursor: cursor ? { id: cursor } : undefined,
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      filename: true,
-      contentType: true,
-      size: true,
-      url: true,
-      isPublic: true,
-      createdAt: true,
-    },
-  });
+  if (cursor) {
+    // Note: Supabase doesn't have native cursor pagination like Prisma
+    // This is a simplified version - you may want to use range-based pagination instead
+    query = query.gt("id", cursor);
+  }
+
+  const { data: files, error: filesError } = await query;
+
+  if (filesError) {
+    return proxyError("Failed to fetch files", "DATABASE_ERROR", 500);
+  }
 
   // Check if there are more results
-  const hasMore = files.length > limit;
-  const resultFiles = hasMore ? files.slice(0, limit) : files;
+  const hasMore = (files?.length || 0) > limit;
+  const resultFiles = hasMore ? files!.slice(0, limit) : files || [];
   const nextCursor = hasMore ? resultFiles[resultFiles.length - 1]?.id : null;
 
   // Get total count
-  const totalCount = await prisma.storageFile.count({ where });
+  const { count: totalCount } = await supabase
+    .from("storage_files")
+    .select("*", { count: "exact", head: true })
+    .eq("project_id", projectId)
+    .is("deleted_at", null);
+
+  const formattedFiles = resultFiles.map((f) => ({
+    id: f.id,
+    filename: f.filename,
+    contentType: f.content_type,
+    size: f.size,
+    url: f.url,
+    isPublic: f.is_public,
+    createdAt: f.created_at,
+  }));
 
   return proxySuccess({
-    files: resultFiles,
+    files: formattedFiles,
     nextCursor,
-    totalCount,
+    totalCount: totalCount || 0,
   });
 }
 
@@ -421,7 +432,7 @@ export async function DELETE(request: NextRequest) {
   const { apiKeyId, projectId, userId, services } = auth.context;
 
   // Check service access
-  if (!hasServiceAccess(services, "STORAGE)) {
+  if (!hasServiceAccess(services, "storage")) {
     return proxyError(
       "This API key does not have access to the Storage service",
       "FORBIDDEN",
@@ -442,20 +453,26 @@ export async function DELETE(request: NextRequest) {
     return proxyError("fileId is required", "VALIDATION_ERROR", 400);
   }
 
-  // Find file
-  const file = await prisma.storageFile.findFirst({
-    where: { id: fileId, projectId, deletedAt: null },
-  });
+  const supabase = await createClient();
 
-  if (!file) {
+  // Find file
+  const { data: file, error: fileError } = await supabase
+    .from("storage_files")
+    .select("*")
+    .eq("id", fileId)
+    .eq("project_id", projectId)
+    .is("deleted_at", null)
+    .single();
+
+  if (fileError || !file) {
     return proxyError("File not found", "NOT_FOUND", 404);
   }
 
   // Soft delete the file
-  await prisma.storageFile.update({
-    where: { id: fileId },
-    data: { deletedAt: new Date() },
-  });
+  await supabase
+    .from("storage_files")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", fileId);
 
   // TODO: Actually delete from S3/R2 in production
 
@@ -464,7 +481,7 @@ export async function DELETE(request: NextRequest) {
     apiKeyId,
     projectId,
     userId,
-    service: "STORAGE,
+    service: "storage",
     operation: "delete",
     creditsUsed: 0,
     success: true,

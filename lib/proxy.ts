@@ -3,13 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { redis } from "@/lib/rate-limit";
 import { Ratelimit } from "@upstash/ratelimit";
 import {
-  ProxyService,
+  type ProxyService,
+  ProxyServiceEnum,
   PLAN_CREDITS,
   PLAN_CREDITS_REFRESH,
   SERVICE_CREDIT_COSTS,
 } from "@/types/proxy";
 import { Plan, PLAN_LIMITS } from "@/types";
-import { ProxyService as PrismaProxyService } from "@prisma/client";
 
 // ============================================
 // API Key Management
@@ -23,7 +23,7 @@ import { ProxyService as PrismaProxyService } from "@prisma/client";
 export async function generateApiKey(
   projectId: string,
   name: string = "Default",
-  services: PrismaProxyService[] = Object.values(PrismaProxyService),
+  services: ProxyService[] = ProxyServiceEnum.options,
 ): Promise<{ rawKey: string; keyId: string; keyPrefix: string }> {
   // Generate a secure random key
   const rawKey = `rux_${randomBytes(32).toString("hex")}`;
@@ -34,16 +34,23 @@ export async function generateApiKey(
   const { encrypt } = await import("@/lib/encrypt");
   const keyEncrypted = await encrypt(rawKey);
 
-  const apiKey = await prisma.projectApiKey.create({
-    data: {
+  const supabase = await createClient();
+  const { data: apiKey, error } = await supabase
+    .from("project_api_keys")
+    .insert({
       name,
-      keyHash,
-      keyPrefix,
-      keyEncrypted,
+      key_hash: keyHash,
+      key_prefix: keyPrefix,
+      key_encrypted: keyEncrypted,
       services,
-      projectId,
-    },
-  });
+      project_id: projectId,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create API key: ${error.message}`);
+  }
 
   return {
     rawKey, // Only returned once!
@@ -64,7 +71,7 @@ export function hashApiKey(rawKey: string): string {
  */
 export async function validateApiKey(rawKey: string): Promise<{
   valid: boolean;
-  apiKey?: Awaited<ReturnType<typeof prisma.projectApiKey.findUnique>> & {
+  apiKey?: any & {
     project: { id: string; userId: string; user: { plan: Plan } };
   };
   error?: string;
@@ -74,23 +81,20 @@ export async function validateApiKey(rawKey: string): Promise<{
   }
 
   const keyHash = hashApiKey(rawKey);
+  const supabase = await createClient();
 
-  const apiKey = await prisma.projectApiKey.findUnique({
-    where: { keyHash },
-    include: {
-      project: {
-        select: {
-          id: true,
-          userId: true,
-          user: {
-            select: { plan: true },
-          },
-        },
-      },
-    },
-  });
+  const { data: apiKey, error: fetchError } = await supabase
+    .from("project_api_keys")
+    .select(
+      `
+      *,
+      project:projects(id, user_id, user:users(plan))
+    `,
+    )
+    .eq("key_hash", keyHash)
+    .single();
 
-  if (!apiKey) {
+  if (fetchError || !apiKey) {
     return { valid: false, error: "API key not found" };
   }
 
@@ -98,22 +102,29 @@ export async function validateApiKey(rawKey: string): Promise<{
     return { valid: false, error: "API key is disabled" };
   }
 
-  if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
+  if (apiKey.expires_at && new Date(apiKey.expires_at) < new Date()) {
     return { valid: false, error: "API key has expired" };
   }
 
-  // Update last used timestamp (non-blocking)
-  prisma.projectApiKey
-    .update({
-      where: { id: apiKey.id },
-      data: { lastUsedAt: new Date() },
-    })
-    .catch(() => {}); // Ignore errors
+  // Update last used timestamp (non-blocking - fire and forget)
+  void (async () => {
+    try {
+      await supabase
+        .from("project_api_keys")
+        .update({ last_used_at: new Date().toISOString() })
+        .eq("id", apiKey.id);
+    } catch {} // Ignore errors
+  })();
 
   return {
     valid: true,
-    apiKey: apiKey as typeof apiKey & {
-      project: { id: string; userId: string; user: { plan: Plan } };
+    apiKey: {
+      ...apiKey,
+      project: {
+        id: apiKey.project.id,
+        userId: apiKey.project.user_id,
+        user: { plan: apiKey.project.user.plan },
+      },
     },
   };
 }
@@ -122,8 +133,8 @@ export async function validateApiKey(rawKey: string): Promise<{
  * Check if an API key has access to a specific service
  */
 export function hasServiceAccess(
-  apiKeyServices: PrismaProxyService[],
-  service: PrismaProxyService,
+  apiKeyServices: ProxyService[],
+  service: ProxyService,
 ): boolean {
   return apiKeyServices.includes(service);
 }
@@ -136,42 +147,66 @@ export function hasServiceAccess(
  * Get or create credits for a user
  */
 export async function getOrCreateCredits(userId: string, plan: Plan) {
-  let credits = await prisma.proxyCredits.findUnique({
-    where: { userId },
-  });
+  const supabase = await createClient();
+
+  let { data: credits, error: fetchError } = await supabase
+    .from("proxy_credits")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+
+  if (fetchError && fetchError.code !== "PGRST116") {
+    throw new Error(`Failed to fetch credits: ${fetchError.message}`);
+  }
 
   if (!credits) {
-    const now = new Date();
-    const periodEnd = new Date(now);
+    const now = new Date().toISOString();
+    const periodEnd = new Date();
     periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-    credits = await prisma.proxyCredits.create({
-      data: {
-        userId,
+    const { data: newCredits, error: createError } = await supabase
+      .from("proxy_credits")
+      .insert({
+        user_id: userId,
         balance: PLAN_CREDITS[plan],
-        monthlyAllotment: PLAN_CREDITS[plan],
-        periodStart: now,
-        periodEnd,
-      },
-    });
+        monthly_allotment: PLAN_CREDITS[plan],
+        period_start: now,
+        period_end: periodEnd.toISOString(),
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      throw new Error(`Failed to create credits: ${createError.message}`);
+    }
+
+    credits = newCredits;
   }
 
   // Check if we need to reset for new billing period
-  if (credits.periodEnd < new Date()) {
-    const now = new Date();
-    const periodEnd = new Date(now);
+  if (new Date(credits.period_end) < new Date()) {
+    const now = new Date().toISOString();
+    const periodEnd = new Date();
     periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-    credits = await prisma.proxyCredits.update({
-      where: { userId },
-      data: {
+    const { data: updatedCredits, error: updateError } = await supabase
+      .from("proxy_credits")
+      .update({
         balance: PLAN_CREDITS[plan],
-        monthlyAllotment: PLAN_CREDITS[plan],
-        periodStart: now,
-        periodEnd,
-        overageCredits: 0,
-      },
-    });
+        monthly_allotment: PLAN_CREDITS[plan],
+        period_start: now,
+        period_end: periodEnd.toISOString(),
+        overage_credits: 0,
+      })
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw new Error(`Failed to update credits: ${updateError.message}`);
+    }
+
+    credits = updatedCredits;
   }
 
   return credits;
@@ -205,12 +240,15 @@ export async function deductCredits(
   units: number = 1,
 ): Promise<{ success: boolean; newBalance: number; overageUsed: boolean }> {
   const cost = SERVICE_CREDIT_COSTS[service] * units;
+  const supabase = await createClient();
 
-  const credits = await prisma.proxyCredits.findUnique({
-    where: { userId },
-  });
+  const { data: credits, error: fetchError } = await supabase
+    .from("proxy_credits")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
 
-  if (!credits) {
+  if (fetchError || !credits) {
     return { success: false, newBalance: 0, overageUsed: false };
   }
 
@@ -218,28 +256,30 @@ export async function deductCredits(
 
   if (credits.balance >= cost) {
     // Deduct from balance
-    await prisma.proxyCredits.update({
-      where: { userId },
-      data: { balance: { decrement: cost } },
-    });
+    await supabase
+      .from("proxy_credits")
+      .update({ balance: credits.balance - cost })
+      .eq("user_id", userId);
   } else {
     // Use remaining balance + overage
     const remaining = credits.balance;
     const overage = cost - remaining;
 
-    await prisma.proxyCredits.update({
-      where: { userId },
-      data: {
+    await supabase
+      .from("proxy_credits")
+      .update({
         balance: 0,
-        overageCredits: { increment: overage },
-      },
-    });
+        overage_credits: credits.overage_credits + overage,
+      })
+      .eq("user_id", userId);
     overageUsed = true;
   }
 
-  const updated = await prisma.proxyCredits.findUnique({
-    where: { userId },
-  });
+  const { data: updated } = await supabase
+    .from("proxy_credits")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
 
   return {
     success: true,
@@ -273,7 +313,7 @@ function createRateLimiter(service: string, limit: number): Ratelimit {
 }
 
 // Per-service rate limiters
-const proxyRateLimiters: Record<ProxyService, Ratelimit> = {
+const proxyRateLimiters: Record<string, Ratelimit> = {
   // AI Models
   xai: createRateLimiter("xai", RATE_LIMITS.ai),
   openai: createRateLimiter("openai", RATE_LIMITS.ai),
@@ -365,7 +405,7 @@ export async function logProxyUsage(params: {
   apiKeyId: string;
   projectId: string;
   userId: string;
-  service: PrismaProxyService;
+  service: ProxyService;
   operation: string;
   creditsUsed: number;
   success: boolean;
@@ -375,22 +415,25 @@ export async function logProxyUsage(params: {
   responseSize?: number;
   latencyMs?: number;
 }): Promise<void> {
-  await prisma.proxyUsage.create({
-    data: {
-      apiKeyId: params.apiKeyId,
-      projectId: params.projectId,
-      userId: params.userId,
-      service: params.service,
-      operation: params.operation,
-      creditsUsed: params.creditsUsed,
-      success: params.success,
-      errorCode: params.errorCode,
-      metadata: params.metadata,
-      requestSize: params.requestSize,
-      responseSize: params.responseSize,
-      latencyMs: params.latencyMs,
-    },
+  const supabase = await createClient();
+  const { error } = await supabase.from("proxy_usage").insert({
+    api_key_id: params.apiKeyId,
+    project_id: params.projectId,
+    user_id: params.userId,
+    service: params.service,
+    operation: params.operation,
+    credits_used: params.creditsUsed,
+    success: params.success,
+    error_code: params.errorCode,
+    metadata: params.metadata,
+    request_size: params.requestSize,
+    response_size: params.responseSize,
+    latency_ms: params.latencyMs,
   });
+
+  if (error) {
+    console.error("Failed to log proxy usage:", error);
+  }
 }
 
 // ============================================
@@ -402,7 +445,7 @@ export interface ProxyContext {
   projectId: string;
   userId: string;
   plan: Plan;
-  services: PrismaProxyService[];
+  services: ProxyService[];
 }
 
 /**

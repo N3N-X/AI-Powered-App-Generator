@@ -87,20 +87,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = BuildRequestSchema.parse(body);
 
-    // Get user with credentials
-    const user = await prisma.user.findUnique({
-      where: { id: uid },
-      include: {
-        projects: {
-          where: { id: data.projectId },
-        },
-        credentials: {
-          where: { platform: { in: ["expo", "google"] } },
-        },
-      },
-    });
+    const supabase = await createClient();
 
-    if (!user) {
+    // Get user
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", uid)
+      .single();
+
+    if (userError || !user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -112,17 +108,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const project = user.projects[0];
-    if (!project) {
+    // Get project
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", data.projectId)
+      .eq("user_id", uid)
+      .single();
+
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     // Get credentials
-    const expoCred = user.credentials.find((c) => c.platform === "expo");
-    const googleCred = user.credentials.find((c) => c.platform === "google");
+    const { data: credentials, error: credError } = await supabase
+      .from("credentials")
+      .select("*")
+      .eq("user_id", uid)
+      .in("platform", ["expo", "google"]);
+
+    const expoCred = credentials?.find((c) => c.platform === "expo");
+    const googleCred = credentials?.find((c) => c.platform === "google");
 
     // Decrypt credentials
-    const credentials: {
+    const buildCredentials: {
       expo?: { accessToken: string };
       google?: { serviceAccountJson: string };
     } = {};
@@ -130,9 +139,9 @@ export async function POST(request: NextRequest) {
     if (expoCred) {
       try {
         const decrypted = await decryptJson<{ accessToken: string }>(
-          expoCred.encryptedData,
+          expoCred.encrypted_data,
         );
-        credentials.expo = decrypted;
+        buildCredentials.expo = decrypted;
       } catch (error) {
         console.error("Failed to decrypt Expo credentials:", error);
       }
@@ -141,9 +150,9 @@ export async function POST(request: NextRequest) {
     if (googleCred) {
       try {
         const decrypted = await decryptJson<{ serviceAccountJson: string }>(
-          googleCred.encryptedData,
+          googleCred.encrypted_data,
         );
-        credentials.google = decrypted;
+        buildCredentials.google = decrypted;
       } catch (error) {
         console.error("Failed to decrypt Google credentials:", error);
       }
@@ -151,7 +160,7 @@ export async function POST(request: NextRequest) {
 
     // Validate credentials
     const validation = validateBuildCredentials("ANDROID", {
-      expo: credentials.expo,
+      expo: buildCredentials.expo,
     });
     if (!validation.valid) {
       return NextResponse.json(
@@ -164,8 +173,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare project files for build
-    const codeFiles = project.codeFiles as CodeFiles;
-    const appConfig = project.appConfig as AppConfig;
+    const codeFiles = project.code_files as CodeFiles;
+    const appConfig = project.app_config as AppConfig;
     const preparedFiles = prepareProjectForBuild(codeFiles, appConfig);
 
     // Trigger EAS build
@@ -174,21 +183,27 @@ export async function POST(request: NextRequest) {
       profile: data.profile,
       codeFiles: preparedFiles,
       appConfig,
-      credentials,
+      credentials: buildCredentials,
     });
 
     // Create build record
-    const build = await prisma.build.create({
-      data: {
+    const { data: build, error: buildError } = await supabase
+      .from("builds")
+      .insert({
         platform: "ANDROID",
         status: "QUEUED",
-        easBuildId: buildId,
-        buildUrl,
-        buildProfile: data.profile,
-        userId: user.id,
-        projectId: project.id,
-      },
-    });
+        eas_build_id: buildId,
+        build_url: buildUrl,
+        build_profile: data.profile,
+        user_id: user.id,
+        project_id: project.id,
+      })
+      .select()
+      .single();
+
+    if (buildError || !build) {
+      throw new Error("Failed to create build record");
+    }
 
     const estimate = estimateBuildTime("ANDROID", data.profile);
 
