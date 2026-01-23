@@ -8,6 +8,23 @@ const nextConfig: NextConfig = {
     "expo",
     "@expo/vector-icons",
   ],
+  // Turbopack configuration for Next.js 16
+  turbopack: {
+    resolveAlias: {
+      "react-native": "react-native-web",
+    },
+    resolveExtensions: [
+      ".web.js",
+      ".web.jsx",
+      ".web.ts",
+      ".web.tsx",
+      ".js",
+      ".jsx",
+      ".ts",
+      ".tsx",
+      ".json",
+    ],
+  },
   // Security headers
   async headers() {
     return [
