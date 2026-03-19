@@ -1,0 +1,137 @@
+import { getAuthenticatedUser } from "@/lib/auth-helpers";
+import { NextRequest, NextResponse } from "next/server";
+import {
+  stripe,
+  TOKEN_PACKAGES,
+  TokenPackageType,
+  isStripeConfigured,
+} from "@/lib/billing";
+import { createClient } from "@/lib/supabase/server";
+import { withRateLimit } from "@/lib/rate-limit";
+
+export async function POST(request: NextRequest) {
+  // Rate limit: 10 per minute per IP
+  const limited = await withRateLimit(request, { limit: 10, window: 60_000 });
+  if (limited) return limited;
+
+  try {
+    // Check if Stripe is configured
+    if (!stripe || !isStripeConfigured()) {
+      return NextResponse.json(
+        {
+          error:
+            "Stripe is not configured. Please add STRIPE_SECRET_KEY to your environment variables.",
+        },
+        { status: 503 },
+      );
+    }
+
+    const { uid } = await getAuthenticatedUser(request);
+    if (!uid) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { package: packageType } = await request.json();
+
+    if (
+      !packageType ||
+      !["SMALL", "MEDIUM", "LARGE", "MEGA"].includes(packageType)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid token package" },
+        { status: 400 },
+      );
+    }
+
+    const tokenPackage = TOKEN_PACKAGES[packageType as TokenPackageType];
+    if (!tokenPackage.priceId) {
+      return NextResponse.json(
+        {
+          error: `Price ID for ${packageType} package is not configured. Please set STRIPE_TOKEN_${packageType}_PRICE_ID in your environment.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    const supabase = await createClient();
+
+    // Get user from database
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id, email, name, stripe_customer_id, plan")
+      .eq("id", uid)
+      .single();
+
+    if (userError || !user) {
+      console.error("Failed to fetch user:", userError);
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (user.plan === "FREE") {
+      return NextResponse.json(
+        { error: "Credit refills are available on Pro or Elite plans." },
+        { status: 403 },
+      );
+    }
+
+    // Check if user already has a Stripe customer ID
+    let customerId = user.stripe_customer_id;
+
+    if (!customerId) {
+      // Create a new Stripe customer
+      const customer = await stripe.customers.create({
+        email: user.email,
+        name: user.name || undefined,
+        metadata: {
+          id: uid,
+          userId: user.id,
+        },
+      });
+      customerId = customer.id;
+
+      // Save the customer ID to the database
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({ stripe_customer_id: customerId })
+        .eq("id", user.id);
+
+      if (updateError) {
+        console.error(
+          "Failed to update user with Stripe customer ID:",
+          updateError,
+        );
+      }
+    }
+
+    // Create checkout session for one-time payment
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: "payment", // One-time payment, not subscription
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price: tokenPackage.priceId,
+          quantity: 1,
+        },
+      ],
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard?token_purchase=success&credits=${tokenPackage.credits}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard?token_purchase=canceled`,
+      metadata: {
+        userId: user.id,
+        id: uid,
+        packageType: packageType,
+        credits: tokenPackage.credits.toString(),
+        type: "token_purchase",
+      },
+    });
+
+    return NextResponse.json({ url: session.url });
+  } catch (error) {
+    console.error("[Token Purchase] Checkout error:", error);
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Failed to create checkout session";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
+  }
+}

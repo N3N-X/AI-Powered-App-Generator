@@ -1,0 +1,1800 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Rulxy Platform API",
+    "description": "Internal API documentation for the Rulxy platform. Covers project management, code generation, builds, proxy services, billing, and admin endpoints.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current environment"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Supabase JWT token"
+      },
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-RUX-API-Key",
+        "description": "RUX API key for proxy services"
+      }
+    }
+  },
+  "tags": [
+    { "name": "Health", "description": "Health check" },
+    { "name": "Projects", "description": "Project CRUD and management" },
+    { "name": "Code Generation", "description": "AI-powered code generation" },
+    { "name": "Builds", "description": "EAS build submission and status" },
+    { "name": "Export", "description": "Project export" },
+    { "name": "GitHub", "description": "GitHub integration" },
+    {
+      "name": "Credentials",
+      "description": "Apple and Google developer credentials"
+    },
+    { "name": "Billing", "description": "Subscription and token billing" },
+    { "name": "Blog", "description": "Public blog endpoints" },
+    { "name": "Admin", "description": "Admin-only endpoints" },
+    {
+      "name": "Proxy Services",
+      "description": "Managed backend services for generated apps"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health check endpoint",
+        "description": "Checks the health of the application, including database connection.",
+        "tags": ["Health"],
+        "responses": {
+          "200": {
+            "description": "Application is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" },
+                    "timestamp": { "type": "string" },
+                    "services": {
+                      "type": "object",
+                      "properties": {
+                        "database": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unhealthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" },
+                    "timestamp": { "type": "string" },
+                    "error": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}": {
+      "get": {
+        "summary": "Get a single project",
+        "description": "Retrieves a specific project by ID, ensuring the authenticated user owns it.",
+        "tags": ["Projects"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "ID of the project to retrieve"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "project": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User or project not found" },
+          "500": { "description": "Failed to fetch project" }
+        }
+      },
+      "patch": {
+        "summary": "Update a project",
+        "description": "Updates an existing project by ID with provided fields. Only the owner can update their project.",
+        "tags": ["Projects"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "ID of the project to update"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "New name for the project"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "New description"
+                  },
+                  "codeFiles": {
+                    "type": "object",
+                    "description": "Updated code files"
+                  },
+                  "appConfig": { "description": "Updated app configuration" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Project updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "project": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User or project not found" },
+          "500": { "description": "Failed to update project" }
+        }
+      },
+      "delete": {
+        "summary": "Delete a project",
+        "description": "Deletes a project by ID, ensuring the authenticated user owns it.",
+        "tags": ["Projects"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "ID of the project to delete"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User or project not found" },
+          "500": { "description": "Failed to delete project" }
+        }
+      }
+    },
+    "/api/projects/{id}/domain": {
+      "get": {
+        "summary": "Get domain settings for a project",
+        "description": "Retrieves the subdomain and custom domain settings for a web project.",
+        "tags": ["Projects"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Domain settings retrieved" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "Project not found" }
+        }
+      },
+      "patch": {
+        "summary": "Update domain settings for a project",
+        "description": "Updates the subdomain or custom domain for a web project.",
+        "tags": ["Projects"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Domain settings updated" },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "Project not found" }
+        }
+      },
+      "delete": {
+        "summary": "Remove domain settings from a project",
+        "description": "Clears subdomain and/or custom domain from a project.",
+        "tags": ["Projects"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Domain settings removed" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "Project not found" }
+        }
+      }
+    },
+    "/api/projects/{id}/domain/verify": {
+      "post": {
+        "summary": "Verify custom domain DNS settings",
+        "description": "Checks if the custom domain has correct DNS records configured.",
+        "tags": ["Projects"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "DNS verification result" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "Project not found" }
+        }
+      }
+    },
+    "/api/build": {
+      "post": {
+        "summary": "Submit a project for EAS build",
+        "description": "Builds a project using Expo Application Services (EAS), requiring authentication and a project ID. Submits a ZIP archive of the project files to EAS for building.",
+        "tags": ["Builds"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["projectId"],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "description": "ID of the project to build"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Build submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "buildId": { "type": "string" },
+                    "status": { "type": "string" },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Bad request, missing project ID" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User or project not found" },
+          "500": { "description": "Build failed or EAS not configured" }
+        }
+      },
+      "get": {
+        "summary": "Check EAS build status",
+        "description": "Retrieves the status of an EAS build by build ID, requiring authentication. Returns build details including phase, URL, and error if any.",
+        "tags": ["Builds"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "buildId",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "ID of the build to check"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Build status retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "buildId": { "type": "string" },
+                    "status": { "type": "string" },
+                    "phase": { "type": "string" },
+                    "platform": { "type": "string" },
+                    "url": { "type": "string" },
+                    "qrCodeUrl": { "type": "string" },
+                    "error": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Bad request, missing build ID" },
+          "401": { "description": "Unauthorized" },
+          "500": {
+            "description": "Failed to get build status or EAS not configured"
+          }
+        }
+      }
+    },
+    "/api/build/ios": {
+      "post": {
+        "summary": "Trigger iOS EAS build",
+        "description": "Builds an iOS app using Expo Application Services (EAS). Signing is handled by the platform's managed credentials. Users only need sufficient credits.",
+        "tags": ["Builds"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["projectId"],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "description": "ID of the project to build"
+                  },
+                  "profile": {
+                    "type": "string",
+                    "description": "Build profile (development, preview, production)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Build triggered successfully" },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Insufficient credits" },
+          "404": { "description": "User or project not found" },
+          "500": { "description": "Build failed" }
+        }
+      }
+    },
+    "/api/build/android": {
+      "post": {
+        "summary": "Trigger Android EAS build",
+        "description": "Builds an Android app using Expo Application Services (EAS). Signing is handled by the platform's managed credentials. Users only need sufficient credits.",
+        "tags": ["Builds"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["projectId"],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "description": "ID of the project to build"
+                  },
+                  "profile": {
+                    "type": "string",
+                    "description": "Build profile (development, preview, production)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Build triggered successfully" },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Insufficient credits" },
+          "404": { "description": "User or project not found" },
+          "500": { "description": "Build failed" }
+        }
+      }
+    },
+    "/api/export": {
+      "get": {
+        "summary": "Export project as ZIP",
+        "description": "Downloads a complete project as a ZIP file, including all code files, configurations, and additional files like README and .gitignore. Requires authentication and ownership of the project.",
+        "tags": ["Export"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "projectId",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "ID of the project to export"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ZIP file download",
+            "content": {
+              "application/zip": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          },
+          "400": { "description": "Project ID required" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User or project not found" },
+          "500": { "description": "Export failed" }
+        }
+      }
+    },
+    "/api/github/connect": {
+      "post": {
+        "summary": "Connect GitHub account",
+        "description": "Verifies and stores an encrypted GitHub access token for the authenticated user. The token is validated and user information is retrieved from GitHub.",
+        "tags": ["GitHub"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["accessToken"],
+                "properties": {
+                  "accessToken": {
+                    "type": "string",
+                    "description": "GitHub personal access token"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "GitHub account connected successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "github": {
+                      "type": "object",
+                      "properties": {
+                        "login": { "type": "string" },
+                        "name": { "type": "string" },
+                        "avatarUrl": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User not found" },
+          "500": { "description": "Failed to connect GitHub account" }
+        }
+      },
+      "get": {
+        "summary": "Check GitHub connection status",
+        "description": "Returns whether the authenticated user has a connected GitHub account.",
+        "tags": ["GitHub"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Connection status retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "connected": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User not found" },
+          "500": { "description": "Failed to check GitHub status" }
+        }
+      },
+      "delete": {
+        "summary": "Disconnect GitHub account",
+        "description": "Removes the stored GitHub access token for the authenticated user, disconnecting their GitHub account.",
+        "tags": ["GitHub"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "GitHub account disconnected successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User not found" },
+          "500": { "description": "Failed to disconnect GitHub account" }
+        }
+      }
+    },
+    "/api/github/create-repo": {
+      "post": {
+        "summary": "Create GitHub repository and push project code",
+        "description": "Creates a new GitHub repository for the authenticated user, pushes the project's code files to it, and updates the project record with GitHub information. Requires GitHub integration plan and connected GitHub account.",
+        "tags": ["GitHub"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["projectId", "repoName"],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "description": "ID of the project to create repo for"
+                  },
+                  "repoName": {
+                    "type": "string",
+                    "description": "Name of the repository"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Repository description"
+                  },
+                  "isPrivate": {
+                    "type": "boolean",
+                    "description": "Whether the repository is private"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Repository created and code pushed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "repository": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "fullName": { "type": "string" },
+                        "url": { "type": "string" },
+                        "cloneUrl": { "type": "string" },
+                        "private": { "type": "boolean" }
+                      }
+                    },
+                    "commit": {
+                      "type": "object",
+                      "properties": {
+                        "sha": { "type": "string" },
+                        "url": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Validation error or GitHub not connected" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Plan does not allow GitHub integration" },
+          "404": { "description": "User or project not found" },
+          "500": { "description": "Failed to create repository" }
+        }
+      }
+    },
+    "/api/github/push": {
+      "post": {
+        "summary": "Push project code to GitHub repository",
+        "description": "Pushes the latest project code to an existing connected GitHub repository. Requires GitHub integration plan, connected GitHub account, and a repository linked to the project.",
+        "tags": ["GitHub"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["projectId", "commitMessage"],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "description": "ID of the project to push"
+                  },
+                  "commitMessage": {
+                    "type": "string",
+                    "description": "Commit message for the push"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Code pushed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "commit": {
+                      "type": "object",
+                      "properties": {
+                        "sha": { "type": "string" },
+                        "url": { "type": "string" },
+                        "message": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error, GitHub not connected, or project not linked to repo"
+          },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Plan does not allow GitHub integration" },
+          "404": { "description": "User or project not found" },
+          "500": { "description": "Failed to push code" }
+        }
+      }
+    },
+    "/api/creds/connect-google": {
+      "post": {
+        "summary": "Connect Google Play credentials",
+        "description": "Saves encrypted Google Play service account credentials for EAS builds. Requires authentication and a Pro or Elite plan. Overwrites existing credentials with the same name.",
+        "tags": ["Credentials"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "serviceAccountJson", "packageName"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name for the credential"
+                  },
+                  "serviceAccountJson": {
+                    "type": "string",
+                    "description": "Google service account JSON as string"
+                  },
+                  "packageName": {
+                    "type": "string",
+                    "description": "Android package name"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Credentials saved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Validation error or invalid JSON" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Plan does not allow credentials" },
+          "404": { "description": "User not found" },
+          "500": { "description": "Failed to save credentials" }
+        }
+      },
+      "get": {
+        "summary": "Check Google credentials status",
+        "description": "Retrieves the list of connected Google Play credentials for the authenticated user.",
+        "tags": ["Credentials"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Credentials retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "connected": { "type": "boolean" },
+                    "credentials": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "name": { "type": "string" },
+                          "verified": { "type": "boolean" },
+                          "packageName": { "type": "string" },
+                          "createdAt": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User not found" },
+          "500": { "description": "Failed to check credentials" }
+        }
+      },
+      "delete": {
+        "summary": "Remove Google credentials",
+        "description": "Deletes a specific Google Play credential by ID. Requires the credential to belong to the authenticated user.",
+        "tags": ["Credentials"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "ID of the credential to delete"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Credential ID required" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User not found" },
+          "500": { "description": "Failed to delete credentials" }
+        }
+      }
+    },
+    "/api/creds/connect-apple": {
+      "post": {
+        "summary": "Connect App Store Connect API Key",
+        "description": "Saves encrypted App Store Connect API Key credentials for publishing builds to the App Store. Overwrites existing credentials with the same name.",
+        "tags": ["Credentials"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "keyId", "issuerId", "p8Key"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name for the credential"
+                  },
+                  "keyId": { "type": "string" },
+                  "issuerId": { "type": "string" },
+                  "p8Key": { "type": "string" },
+                  "teamId": { "type": "string" },
+                  "bundleId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Credentials saved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Plan does not allow credentials" },
+          "404": { "description": "User not found" },
+          "500": { "description": "Failed to save credentials" }
+        }
+      },
+      "get": {
+        "summary": "Check Apple credentials status",
+        "description": "Retrieves the list of connected Apple Developer credentials for the authenticated user.",
+        "tags": ["Credentials"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Credentials retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "connected": { "type": "boolean" },
+                    "credentials": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "name": { "type": "string" },
+                          "verified": { "type": "boolean" },
+                          "teamId": { "type": "string" },
+                          "createdAt": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User not found" },
+          "500": { "description": "Failed to check credentials" }
+        }
+      },
+      "delete": {
+        "summary": "Remove Apple credentials",
+        "description": "Deletes a specific Apple Developer credential by ID. Requires the credential to belong to the authenticated user.",
+        "tags": ["Credentials"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "ID of the credential to delete"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Credential ID required" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User not found" },
+          "500": { "description": "Failed to delete credentials" }
+        }
+      }
+    },
+    "/api/billing/portal": {
+      "post": {
+        "summary": "Create billing portal session",
+        "description": "Creates a Stripe billing portal session for the authenticated user to manage their subscription and view token purchase history.",
+        "tags": ["Billing"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Portal session created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "description": "URL to the Stripe billing portal"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "No billing account found" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User not found" },
+          "500": { "description": "Failed to create billing portal session" },
+          "503": { "description": "Stripe not configured" }
+        }
+      }
+    },
+    "/api/billing/tokens/purchase": {
+      "post": {
+        "summary": "Purchase token credits",
+        "description": "Creates a Stripe checkout session for one-time token purchase. Works independently from subscription plans.",
+        "tags": ["Billing"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["package"],
+                "properties": {
+                  "package": {
+                    "type": "string",
+                    "enum": ["SMALL", "MEDIUM", "LARGE", "MEGA"],
+                    "description": "The token package to purchase"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checkout session created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "description": "URL to the Stripe checkout page"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid package" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "User not found" },
+          "500": { "description": "Failed to create checkout session" },
+          "503": { "description": "Stripe not configured" }
+        }
+      }
+    },
+    "/api/billing/webhook": {
+      "post": {
+        "summary": "Handle Stripe webhook events for token purchases",
+        "description": "Handles Stripe webhook events for one-time token purchases and subscription billing.",
+        "tags": ["Billing"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Raw Stripe webhook event payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Webhook processed successfully" },
+          "400": { "description": "Invalid signature" },
+          "500": { "description": "Webhook handler failed" },
+          "503": { "description": "Stripe not configured" }
+        }
+      }
+    },
+    "/api/blog": {
+      "get": {
+        "summary": "List published blog posts",
+        "description": "Public endpoint returning paginated published blog posts.",
+        "tags": ["Blog"],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": { "type": "integer" },
+            "description": "Page number (default 1)"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": { "type": "integer" },
+            "description": "Posts per page (default 10, max 50)"
+          },
+          {
+            "in": "query",
+            "name": "tag",
+            "schema": { "type": "string" },
+            "description": "Filter by tag"
+          }
+        ],
+        "responses": {
+          "200": { "description": "Published posts retrieved" },
+          "500": { "description": "Failed to fetch posts" }
+        }
+      }
+    },
+    "/api/blog/{slug}": {
+      "get": {
+        "summary": "Get a published blog post by slug",
+        "description": "Public endpoint returning a single published blog post.",
+        "tags": ["Blog"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Post retrieved" },
+          "404": { "description": "Post not found" },
+          "500": { "description": "Failed to fetch post" }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "summary": "List all users (admin only)",
+        "description": "Returns a paginated list of all users with their details.",
+        "tags": ["Admin"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": { "type": "integer", "default": 20 }
+          },
+          { "in": "query", "name": "search", "schema": { "type": "string" } },
+          {
+            "in": "query",
+            "name": "plan",
+            "schema": { "type": "string", "enum": ["FREE", "PRO", "ELITE"] }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Users retrieved successfully" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Admin access required" }
+        }
+      },
+      "patch": {
+        "summary": "Update a user (admin only)",
+        "description": "Update a user's plan, role, or credits.",
+        "tags": ["Admin"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": { "type": "string" },
+                  "plan": {
+                    "type": "string",
+                    "enum": ["FREE", "PRO", "ELITE"]
+                  },
+                  "role": { "type": "string", "enum": ["USER", "ADMIN"] },
+                  "credits": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "User updated successfully" },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Admin access required" }
+        }
+      }
+    },
+    "/api/admin/stats": {
+      "get": {
+        "summary": "Get admin dashboard statistics",
+        "description": "Returns platform statistics for admins including user counts, credit usage, and project counts.",
+        "tags": ["Admin"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Statistics retrieved successfully" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Admin access required" },
+          "500": { "description": "Failed to fetch statistics" }
+        }
+      }
+    },
+    "/api/admin/maintenance": {
+      "post": {
+        "summary": "Toggle maintenance mode",
+        "description": "Enables or disables maintenance mode for the platform. Only admins can access this endpoint.",
+        "tags": ["Admin"],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Maintenance mode toggled successfully" },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Admin access required" },
+          "500": { "description": "Failed to toggle maintenance mode" }
+        }
+      },
+      "get": {
+        "summary": "Get maintenance mode status",
+        "description": "Returns the current maintenance mode status. Only admins can access this endpoint.",
+        "tags": ["Admin"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Maintenance mode status retrieved successfully"
+          },
+          "401": { "description": "Unauthorized" },
+          "403": { "description": "Admin access required" }
+        }
+      }
+    },
+    "/api/proxy/db": {
+      "post": {
+        "summary": "Generic Database Proxy",
+        "description": "Store any data in collections. Perfect for bookings, todos, products, or any other data your generated app needs.\n\n**Authentication:** Requires a valid RUX API key.\n\n**Rate Limits:** 100 operations per minute per project.\n\n**Credits:** 1 credit per operation.\n\nData is automatically scoped to your project.",
+        "tags": ["Proxy Services"],
+        "security": [{ "ApiKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["action", "collection"],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "insert",
+                      "find",
+                      "findOne",
+                      "update",
+                      "delete",
+                      "count"
+                    ],
+                    "description": "Database operation to perform"
+                  },
+                  "collection": {
+                    "type": "string",
+                    "description": "Collection name"
+                  },
+                  "data": {
+                    "type": "object",
+                    "description": "Document data (for insert/update)"
+                  },
+                  "filter": {
+                    "type": "object",
+                    "description": "Query filter (for find/update/delete)"
+                  },
+                  "options": {
+                    "type": "object",
+                    "properties": {
+                      "limit": { "type": "integer" },
+                      "offset": { "type": "integer" },
+                      "orderBy": { "type": "string" },
+                      "order": { "type": "string", "enum": ["asc", "desc"] }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Operation successful" },
+          "400": { "description": "Invalid request" },
+          "401": { "description": "Invalid or missing API key" },
+          "402": { "description": "Insufficient credits" },
+          "429": { "description": "Rate limit exceeded" },
+          "500": { "description": "Database error" }
+        }
+      }
+    },
+    "/api/proxy/auth": {
+      "post": {
+        "summary": "App User Authentication Proxy",
+        "description": "Complete user authentication system for generated apps. Supports signup, login, logout, profile management, and password reset.\n\n**Authentication:** Requires a valid RUX API key.\n\n**Rate Limits:** 60 auth operations per minute per project.\n\n**Credits:** 1 credit per operation.\n\nUsers are automatically scoped to your project.",
+        "tags": ["Proxy Services"],
+        "security": [{ "ApiKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["action"],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "signup",
+                      "login",
+                      "logout",
+                      "getProfile",
+                      "updateProfile",
+                      "resetPassword"
+                    ],
+                    "description": "Auth operation"
+                  },
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" },
+                  "name": { "type": "string" },
+                  "token": {
+                    "type": "string",
+                    "description": "Session token for authenticated operations"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Auth operation successful" },
+          "400": { "description": "Invalid request" },
+          "401": {
+            "description": "Invalid or missing API key / Invalid credentials"
+          },
+          "402": { "description": "Insufficient credits" },
+          "429": { "description": "Rate limit exceeded" },
+          "500": { "description": "Auth service error" }
+        }
+      }
+    },
+    "/api/proxy/email": {
+      "post": {
+        "summary": "Email Sending Proxy (SendGrid)",
+        "description": "Proxied access to email sending via SendGrid. Generated apps can send emails without needing their own SendGrid API key.\n\n**Authentication:** Requires a valid RUX API key.\n\n**Rate Limits:** 30 emails per minute per project.\n\n**Credits:** 2 credits per email sent.",
+        "tags": ["Proxy Services"],
+        "security": [{ "ApiKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["to", "subject"],
+                "properties": {
+                  "to": {
+                    "oneOf": [
+                      { "type": "string", "format": "email" },
+                      {
+                        "type": "array",
+                        "items": { "type": "string", "format": "email" }
+                      }
+                    ],
+                    "description": "Recipient email address(es)"
+                  },
+                  "subject": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Email subject line"
+                  },
+                  "text": {
+                    "type": "string",
+                    "description": "Plain text body"
+                  },
+                  "html": { "type": "string", "description": "HTML body" },
+                  "from": {
+                    "type": "string",
+                    "description": "Sender email (must be verified)"
+                  },
+                  "replyTo": { "type": "string", "format": "email" },
+                  "cc": {
+                    "type": "array",
+                    "items": { "type": "string", "format": "email" }
+                  },
+                  "bcc": {
+                    "type": "array",
+                    "items": { "type": "string", "format": "email" }
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "filename": { "type": "string" },
+                        "content": {
+                          "type": "string",
+                          "description": "Base64 encoded content"
+                        },
+                        "contentType": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email sent successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "messageId": { "type": "string" },
+                    "creditsUsed": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid request" },
+          "401": { "description": "Invalid or missing API key" },
+          "402": { "description": "Insufficient credits" },
+          "429": { "description": "Rate limit exceeded" },
+          "500": { "description": "Email service error" }
+        }
+      }
+    },
+    "/api/proxy/sms": {
+      "post": {
+        "summary": "SMS Sending Proxy (Twilio)",
+        "description": "Proxied access to SMS sending via Twilio. Generated apps can send SMS messages without needing their own Twilio account.\n\n**Authentication:** Requires a valid RUX API key.\n\n**Rate Limits:** 20 SMS per minute per project.\n\n**Credits:** 5 credits per SMS sent.",
+        "tags": ["Proxy Services"],
+        "security": [{ "ApiKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["to", "message"],
+                "properties": {
+                  "to": {
+                    "type": "string",
+                    "pattern": "^\\+[1-9]\\d{1,14}$",
+                    "description": "Recipient phone number in E.164 format"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1600,
+                    "description": "SMS message content"
+                  },
+                  "from": {
+                    "type": "string",
+                    "description": "Sender phone number (defaults to platform number)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SMS sent successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "messageId": { "type": "string" },
+                    "creditsUsed": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid request" },
+          "401": { "description": "Invalid or missing API key" },
+          "402": { "description": "Insufficient credits" },
+          "429": { "description": "Rate limit exceeded" },
+          "500": { "description": "SMS service error" }
+        }
+      }
+    },
+    "/api/proxy/maps": {
+      "post": {
+        "summary": "Google Maps API Proxy",
+        "description": "Proxied access to Google Maps APIs including Geocoding, Directions, and Places.\n\n**Authentication:** Requires a valid RUX API key.\n\n**Rate Limits:** 100 requests per minute per project.\n\n**Credits:** 1 credit per request.",
+        "tags": ["Proxy Services"],
+        "security": [{ "ApiKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["operation"],
+                "properties": {
+                  "operation": {
+                    "type": "string",
+                    "enum": ["geocode", "directions", "places"],
+                    "description": "Maps API operation"
+                  },
+                  "address": {
+                    "type": "string",
+                    "description": "Address to geocode"
+                  },
+                  "latlng": {
+                    "type": "string",
+                    "description": "Lat,lng for reverse geocoding"
+                  },
+                  "placeId": {
+                    "type": "string",
+                    "description": "Place ID to lookup"
+                  },
+                  "origin": {
+                    "type": "string",
+                    "description": "Starting point (directions)"
+                  },
+                  "destination": {
+                    "type": "string",
+                    "description": "End point (directions)"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["driving", "walking", "bicycling", "transit"],
+                    "default": "driving"
+                  },
+                  "waypoints": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "query": {
+                    "type": "string",
+                    "description": "Search query (places)"
+                  },
+                  "location": {
+                    "type": "string",
+                    "description": "Lat,lng center point (places)"
+                  },
+                  "radius": {
+                    "type": "number",
+                    "maximum": 50000,
+                    "description": "Search radius in meters"
+                  },
+                  "type": {
+                    "type": "string",
+                    "description": "Place type filter"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response from Google Maps API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "description": "Results from the Maps API"
+                    },
+                    "status": { "type": "string" },
+                    "creditsUsed": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid request" },
+          "401": { "description": "Invalid or missing API key" },
+          "402": { "description": "Insufficient credits" },
+          "429": { "description": "Rate limit exceeded" },
+          "500": { "description": "Google Maps API error" }
+        }
+      }
+    },
+    "/api/proxy/storage": {
+      "post": {
+        "summary": "File Storage - Get Upload URL",
+        "description": "Get a presigned URL for uploading files to the platform's storage.\n\n**Authentication:** Requires a valid RUX API key.\n\n**Rate Limits:** 100 requests per minute per project.\n\n**File Size Limits:** Max 50MB per file.\n\n**Storage Limits:** Based on plan (FREE: 100MB, PRO: 1GB, ELITE: 10GB).",
+        "tags": ["Proxy Services"],
+        "security": [{ "ApiKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["filename", "contentType", "size"],
+                "properties": {
+                  "filename": {
+                    "type": "string",
+                    "description": "Original filename"
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "description": "MIME type of the file"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "maximum": 52428800,
+                    "description": "File size in bytes (max 50MB)"
+                  },
+                  "isPublic": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether the file should be publicly accessible"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload URL generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "uploadUrl": { "type": "string" },
+                    "fileUrl": { "type": "string" },
+                    "fileId": { "type": "string" },
+                    "expiresAt": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid request" },
+          "401": { "description": "Invalid or missing API key" },
+          "413": { "description": "File too large" },
+          "429": { "description": "Rate limit exceeded" }
+        }
+      },
+      "get": {
+        "summary": "File Storage - List Files",
+        "description": "List files stored for the project.\n\n**Authentication:** Requires a valid RUX API key.",
+        "tags": ["Proxy Services"],
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "prefix",
+            "schema": { "type": "string" },
+            "description": "Filter files by prefix"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": { "type": "integer", "maximum": 100, "default": 20 },
+            "description": "Maximum number of files to return"
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": { "type": "string" },
+            "description": "Pagination cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of files",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "filename": { "type": "string" },
+                          "contentType": { "type": "string" },
+                          "size": { "type": "integer" },
+                          "url": { "type": "string" },
+                          "isPublic": { "type": "boolean" },
+                          "createdAt": { "type": "string" }
+                        }
+                      }
+                    },
+                    "nextCursor": { "type": "string" },
+                    "totalCount": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "File Storage - Delete File",
+        "description": "Delete a file from storage.\n\n**Authentication:** Requires a valid RUX API key.",
+        "tags": ["Proxy Services"],
+        "security": [{ "ApiKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["fileId"],
+                "properties": {
+                  "fileId": {
+                    "type": "string",
+                    "description": "ID of the file to delete"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "File deleted successfully" },
+          "404": { "description": "File not found" }
+        }
+      }
+    },
+    "/api/proxy/xai": {
+      "post": {
+        "summary": "xAI Grok Chat Completions Proxy (Default AI)",
+        "description": "Proxied access to xAI's Grok chat completions API. This is the primary AI service for Rulxy apps.\n\n**Authentication:** Requires a valid RUX API key.\n\n**Rate Limits:** 60 requests per minute per project.\n\n**Credits:** 8 credits per 1K tokens.",
+        "tags": ["Proxy Services"],
+        "security": [{ "ApiKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["messages"],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "default": "grok-3-fast-beta",
+                    "description": "xAI model (grok-3-fast-beta, grok-2)"
+                  },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": ["system", "user", "assistant"]
+                        },
+                        "content": { "type": "string" }
+                      }
+                    }
+                  },
+                  "temperature": { "type": "number" },
+                  "max_tokens": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Successful completion" },
+          "401": { "description": "Unauthorized" },
+          "402": { "description": "Insufficient credits" },
+          "429": { "description": "Rate limit exceeded" }
+        }
+      }
+    }
+  }
+}
